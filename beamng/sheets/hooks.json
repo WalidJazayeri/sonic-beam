@@ -161,6 +161,14 @@
       "purpose": "Sonic only takes over plain free roam; tutorials, Discover, career, scenarios and missions keep BeamNG's own walking body",
       "implementation": "sonicAllowed",
       "verified": false
+    },
+    {
+      "id": "unstuck",
+      "side": "lua",
+      "target": "spawn.safeTeleport from the menu button (never automatic)",
+      "purpose": "get Sonic back upright after a crash left the walking body on its side or wedged",
+      "implementation": "unstuck",
+      "verified": false
     }
   ]
 }

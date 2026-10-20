@@ -59,6 +59,8 @@ local autopilotSent = nil
 local settingsSent = nil
 local camPose = {fresh = false}   -- set by the sonicfrontiersChase camera for this frame
 local sonicBodyId = nil           -- walking body Sonic currently drives
+local safeSpots = {}              -- recent spots where Sonic stood upright, for the Unstuck button
+local unstuck                     -- defined below, called from the menu
 local frameReady, frameOnFoot, frameDt, frameGroundedByRay = false, false, 0, false
 local sendFrame
 local prevFeet = nil
@@ -135,6 +137,7 @@ local function drawMenu()
   im.PopItemWidth()
   if im.Checkbox('Show speed', w.showSpeed) then settings.showSpeed = w.showSpeed[0] end
   im.Separator()
+  if im.Button('Unstuck: back to the last safe spot') then w.open[0] = false; unstuck() end
   if im.Button('Close (O)') then w.open[0] = false end
   im.End()
   if not w.open[0] then toggleMenu() end
@@ -273,6 +276,33 @@ local function updateRings(feet)
   rings = keep
 end
 
+-- Unstuck (menu button): a crash at speed can leave the walking body on its side or wedged in
+-- a fence with no way to get up. Only on request, Sonic goes back upright to the last spot he
+-- stood on, a few metres back; BeamNG's safeTeleport finds a free place there and resets the body.
+local function rememberSafeSpot(unicycle, grounded)
+  if not grounded or unicycle:getDirectionVectorUp().z < 0.9 then return end
+  local pos = vec3(unicycle:getPosition())
+  local last = safeSpots[#safeSpots]
+  if last and (pos - last.pos):length() < 2 then return end
+  local dir = bodyVel:length() > 1 and bodyVel or unicycle:getDirectionVector()
+  safeSpots[#safeSpots + 1] = {pos = pos, yaw = math.atan2(dir.y, dir.x)}
+  if #safeSpots > 30 then table.remove(safeSpots, 1) end
+end
+
+unstuck = function()
+  local unicycle = getUnicycle()
+  if not unicycle then return end
+  local here = vec3(unicycle:getPosition())
+  local spot
+  for i = #safeSpots, 1, -1 do
+    if (safeSpots[i].pos - here):length() >= sheets.physics.unstuckMeters then spot = safeSpots[i] break end
+  end
+  spot = spot or safeSpots[1] or {pos = here, yaw = 0}
+  spawn.safeTeleport(unicycle, spot.pos + vec3(0, 0, 0.3), quatFromDir(vec3(-math.cos(spot.yaw), -math.sin(spot.yaw), 0), vec3(0, 0, 1)))
+  prevFeet = nil
+  log('I', logTag, 'Unstuck: Sonic put back on his feet')
+end
+
 local function setSonicCamera(on)
   if on == cameraActive then return end
   cameraActive = on
@@ -330,6 +360,7 @@ local function onPreRender(dtReal, dtSim)
       unicycle:setMeshAlpha(0, '')
     end
     groundedByRay = updateBody(unicycle)
+    rememberSafeSpot(unicycle, groundedByRay or runnerGrounded == 1)
     spawnRings(bodyFeet, bodyVel)
     updateRings(bodyFeet)
   else
@@ -388,6 +419,7 @@ end
 
 local function onClientStartMission()
   onFootDone, runnerLoadedFor, hiddenUnicycle, sonicBodyId = false, nil, nil, nil
+  safeSpots = {}
   rings = {}
   cameraActive = false
 end
@@ -417,6 +449,7 @@ M.onPreRender = onPreRender
 M.onUpdate = onUpdate
 M.onDrawDebug = onDrawDebug
 M.toggleMenu = toggleMenu
+M.unstuck = unstuck
 M.isMenuOpen = function() return menuOpen end
 M.onClientStartMission = onClientStartMission
 M.onClientEndMission = onClientEndMission

@@ -37,6 +37,7 @@
     {"id": "snapKmh",         "value": 60,   "unit": "km/h",  "purpose": "speed above which the ground snap works",                          "verified": false},
     {"id": "snapAccel",       "value": 60,   "unit": "m/s2",  "purpose": "how hard the ground snap pulls",                                   "verified": false},
     {"id": "aeroScale",       "value": 0.02, "unit": "x",     "purpose": "share of the walking body's air drag Sonic keeps (Sonic ignores the air; huge drag forces would tear the soft body apart)", "verified": false},
+    {"id": "unstuckMeters",   "value": 5,    "unit": "m",     "purpose": "menu button Unstuck: Sonic goes back to the last spot he stood upright on at least this far from where he is", "verified": false},
     {"id": "walkerSprintMs",  "value": 100000, "unit": "m/s", "purpose": "sprint speed given to BeamNG's walking controller so it never brakes Sonic", "verified": false}
   ]
 }

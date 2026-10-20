@@ -1,10 +1,13 @@
 # Builds Sonic Beam: sheet preflight -> generated code -> sonic_beamng.dll -> release zip.
-param([string]$Version = '0.1.0', [switch]$NoPackage, [switch]$Dev)
+param([string]$Version = '', [switch]$NoPackage, [switch]$Dev)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $repo = Split-Path -Parent $root
 $zig = Join-Path $repo '.tools\zig-x86_64-windows-0.15.2\zig.exe'
 $acl = Join-Path $repo '.tools\PXDAnimationTools-26fd823adcfba9d053b3ad0acac38aa0ae2086a3\FrontiersAnimDecompress\includes'
+# Version: beamng/VERSION (semantic versioning: major.minor.patch), the same as the git tag vX.Y.Z
+if (-not $Version) { $Version = (Get-Content (Join-Path $root 'VERSION') -Raw).Trim() }
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version '$Version' is not major.minor.patch" }
 $out = Join-Path $root 'build'
 New-Item -ItemType Directory -Force $out | Out-Null
 
@@ -17,7 +20,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Sheet preflight failed: fix the sheets before 
 $luac = Join-Path $repo '.tools\luac51.exe'
 $luaGlobals = @('be','castRayStatic','clamp','controller','core_camera','core_gamestate','gameplay_missions_missionManager','deepcopy','enablePhysicsStepHook','extensions','gameplay_walk',
   'getPlayerVehicle','ipairs','jsonReadFile','jsonWriteFile','log','math','MoveManager','obj','pairs','quatFromDir','require','serialize',
-  'setExtensionUnloadMode','setmetatable','socket','string','table','tostring','type','ui_imgui','v','vec3')
+  'setExtensionUnloadMode','setmetatable','socket','spawn','string','table','tostring','type','ui_imgui','v','vec3')
 foreach ($lua in Get-ChildItem -Recurse (Join-Path $root 'mod') -Filter *.lua) {
     $listing = & $luac -l -p $lua.FullName 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Lua syntax error: $listing" }
@@ -34,7 +37,7 @@ $dll = Join-Path $out 'version.dll'
 $log = Join-Path $out 'compile.log'
 & $zig c++ -target x86_64-windows-gnu -std=c++17 -O2 -shared -fno-sanitize=undefined `
     -Wno-missing-template-arg-list-after-template-kw -Wno-unused-command-line-argument `
-    -I $acl @sources (Join-Path $out 'clhca.o') (Join-Path $root 'src\version.def') `
+    "-DSB_VERSION_NUMBER=$Version" -I $acl @sources (Join-Path $out 'clhca.o') (Join-Path $root 'src\version.def') `
     -o $dll -ld3d11 -ld3d12 -ldxgi -lws2_32 -ld3dcompiler_47 -ldxguid -luser32 -lole32 2>&1 | Out-File -Encoding utf8 $log
 if ($LASTEXITCODE -ne 0) { Get-Content $log | Select-String 'error' | Select-Object -First 40 | ForEach-Object Line; throw 'Renderer compilation failed' }
 Write-Output ("built {0} ({1} bytes)" -f $dll, (Get-Item $dll).Length)

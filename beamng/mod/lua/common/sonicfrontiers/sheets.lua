@@ -29,6 +29,7 @@ M.physics = {
   snapKmh = 60,
   snapAccel = 60,
   aeroScale = 0.02,
+  unstuckMeters = 5,
   walkerSprintMs = 100000,
 }
 M.camera = {

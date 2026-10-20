@@ -4,6 +4,14 @@
 // hooked through the DXGI swap-chain method table; Sonic (GPU-skinned with his Frontiers clips),
 // the rings and the ring counter are drawn into the finished frame with an isolated device-context
 // state, so BeamNG's own pipeline state is never touched.
+// build.ps1 passes the number from beamng/VERSION (e.g. 0.1.4); a bare 0.1.4 is one preprocessor token
+#define SB_STRINGIFY2(x) #x
+#define SB_STRINGIFY(x) SB_STRINGIFY2(x)
+#ifdef SB_VERSION_NUMBER
+#define SB_VERSION SB_STRINGIFY(SB_VERSION_NUMBER)
+#else
+#define SB_VERSION "dev"
+#endif
 #include "common.hpp"
 #include <d3d11_1.h>
 #include <d3dcompiler.h>
@@ -557,7 +565,7 @@ void start_link();   // link.cpp
 extern "C" int sb_start()
 {
     if (InterlockedCompareExchange(&hooked, 1, 0) != 0) return 1;
-    mod::log("Sonic Beam renderer 0.1.3 started in BeamNG");
+    mod::log("Sonic Beam renderer %s started in BeamNG", SB_VERSION);
     start_link();
     testmode::start();
     assets::start_loading();

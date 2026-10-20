@@ -301,6 +301,8 @@ local function onReset()
   speedTarget, learnedPush = 0, 0
   gliding = true
   setGlide(false)
+  -- a reset rebuilds the physics from the jbeam: give Sonic his low air drag back
+  if enabled then setAirDrag(P.aeroScale) end
 end
 
 M.onExtensionLoaded = onExtensionLoaded
