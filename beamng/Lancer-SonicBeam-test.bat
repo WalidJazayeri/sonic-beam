@@ -1,4 +1,6 @@
 @echo off
-rem Lance BeamNG.drive (Steam) avec le dossier de test de Sonic Beam : le mod y est deja installe.
-rem Le rendu de Sonic (version.dll) est deja dans le dossier Bin64 du jeu.
-start "" "steam://run/284160//-userpath %~dp0devuser/"
+rem Lance BeamNG.drive (Steam) sur le dossier de test de Sonic Beam, sans avertissement de Steam.
+rem A faire une seule fois : dans Steam, clic droit sur BeamNG.drive > Proprietes > General >
+rem Options de lancement, coller :  -userpath "<your Sonic Beam folder>\beamng\devuser"
+rem (pour revenir a ton BeamNG normal, il suffit de vider ce champ).
+start "" "steam://rungameid/284160"

@@ -5,6 +5,9 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.2.1
+- Raccourci de test `Lancer-SonicBeam-test.bat` : lance BeamNG sans arguments, donc sans l'avertissement de Steam (le dossier de test se règle une fois dans les options de lancement Steam).
+
 ## v0.2.0
 - Effet de boost de Sonic Frontiers :
   - flou de vitesse radial : l'image file vers Sonic, de plus en plus fort avec la vitesse et le boost ; mini-carte et barre d'outils de BeamNG restent nettes ;
