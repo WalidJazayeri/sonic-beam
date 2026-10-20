@@ -22,7 +22,7 @@ ENUMS = {
     ('states', 'turn'): {'left', 'right', 'any'},
     ('rings', 'trigger'): {'pickup', 'drift', 'air', 'boost'},
     ('spawns', 'mode'): {'play', 'test'},
-    ('assets', 'kind'): {'model', 'skeleton'},
+    ('assets', 'kind'): {'model', 'skeleton', 'texture'},
     ('hooks', 'side'): {'lua', 'native'},
     ('events', 'when'): {'landing'},
 }

@@ -5,13 +5,66 @@
     "id": "identifier",
     "archive": "PAC archive relative to the Frontiers install folder",
     "entry": "file inside the archive",
-    "kind": "model, skeleton",
+    "kind": "model, skeleton, texture",
     "use": "what the mod does with it",
     "verified": "parsed from the installed game and drawn in Forza"
   },
   "rows": [
-    {"id": "sonic_model",    "archive": "image/x64/raw/character/sonic.pac", "entry": "chr_sonic.model",     "kind": "model",    "use": "Sonic's skinned mesh, materials and textures", "verified": false},
-    {"id": "sonic_skeleton", "archive": "image/x64/raw/character/sonic.pac", "entry": "chr_sonic.skl.pxd",   "kind": "skeleton", "use": "bone order for every animation clip",          "verified": false},
-    {"id": "ring_model",     "archive": "image/x64/raw/CommonObject.pac",    "entry": "cmn_obj_ring.model",  "kind": "model",    "use": "ring pickups, ring bursts and the HUD icon",    "verified": false}
+    {
+      "id": "sonic_model",
+      "archive": "image/x64/raw/character/sonic.pac",
+      "entry": "chr_sonic.model",
+      "kind": "model",
+      "use": "Sonic's skinned mesh, materials and textures",
+      "verified": false
+    },
+    {
+      "id": "sonic_skeleton",
+      "archive": "image/x64/raw/character/sonic.pac",
+      "entry": "chr_sonic.skl.pxd",
+      "kind": "skeleton",
+      "use": "bone order for every animation clip",
+      "verified": false
+    },
+    {
+      "id": "ring_model",
+      "archive": "image/x64/raw/CommonObject.pac",
+      "entry": "cmn_obj_ring.model",
+      "kind": "model",
+      "use": "ring pickups, ring bursts and the HUD icon",
+      "verified": false
+    },
+    {
+      "id": "boost_aura_model",
+      "archive": "image/x64/raw/character/sonic.pac",
+      "entry": "chr_sonic_aura.model",
+      "kind": "model",
+      "use": "the blue boost aura: Frontiers' own aura mesh, on Sonic's skeleton",
+      "verified": false
+    },
+    {
+      "id": "boost_aura_texture",
+      "archive": "image/x64/raw/character/sonic.pac",
+      "entry": "ef_y02_so_aura01.dds",
+      "kind": "texture",
+      "use": "the aura's moving energy pattern",
+      "verified": false
+    },
+    {
+      "id": "boost_glow_texture",
+      "archive": "image/x64/raw/EffectCommon.pac",
+      "entry": "ef_n01_com_glowlight04.dds",
+      "kind": "texture",
+      "use": "flash when a boost starts (Frontiers' boost_impact glow)",
+      "verified": false
+    },
+    {
+      "id": "boost_wave_texture",
+      "archive": "image/x64/raw/EffectCommon.pac",
+      "entry": "ef_a01_com_noisewave01_off.dds",
+      "kind": "texture",
+      "use": "shock wave when a boost starts (Frontiers' boost_impact wave)",
+      "verified": false
+    }
   ]
 }

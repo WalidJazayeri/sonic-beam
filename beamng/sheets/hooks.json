@@ -169,6 +169,22 @@
       "purpose": "get Sonic back upright after a crash left the walking body on its side or wedged",
       "implementation": "unstuck",
       "verified": false
+    },
+    {
+      "id": "speed_blur",
+      "side": "native",
+      "target": "ID3D12GraphicsCommandList::CopyResource / ID3D11DeviceContext::CopyResource of the back buffer, then a full-screen pass",
+      "purpose": "Frontiers-style boost blur: BeamNG's frame streaks toward Sonic; minimap and toolbar stay sharp",
+      "implementation": "draw_speed_blur",
+      "verified": true
+    },
+    {
+      "id": "boost_aura",
+      "side": "native",
+      "target": "chr_sonic_aura.model drawn on Sonic's pose, additive",
+      "purpose": "Frontiers' blue boost aura (SonicAura material recreated)",
+      "implementation": "draw_aura",
+      "verified": true
     }
   ]
 }

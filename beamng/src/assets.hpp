@@ -15,6 +15,10 @@ struct Data {
     std::vector<frontiers::Clip> clips;     // indexed by sheets::Anim
     std::vector<frontiers::Pcm> sounds;     // indexed by sheets::Sound (empty when a cue failed)
     float sonic_height = 1;                 // model units, feet to top
+    // Frontiers' boost effect (optional: Sonic still runs without it)
+    bool boost_fx = false;
+    frontiers::Model aura;                  // aura shell on Sonic's own skeleton
+    frontiers::Texture aura_texture, glow_texture, wave_texture;
 };
 
 void start_loading();

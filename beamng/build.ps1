@@ -40,6 +40,11 @@ $log = Join-Path $out 'compile.log'
     "-DSB_VERSION_NUMBER=$Version" -I $acl @sources (Join-Path $out 'clhca.o') (Join-Path $root 'src\version.def') `
     -o $dll -ld3d11 -ld3d12 -ldxgi -lws2_32 -ld3dcompiler_47 -ldxguid -luser32 -lole32 2>&1 | Out-File -Encoding utf8 $log
 if ($LASTEXITCODE -ne 0) { Get-Content $log | Select-String 'error' | Select-Object -First 40 | ForEach-Object Line; throw 'Renderer compilation failed' }
+# HLSL check: the renderers compile their shaders inside BeamNG; catch mistakes here instead
+& $zig c++ -target x86_64-windows-gnu -std=c++17 -O1 -I (Join-Path $root 'src') (Join-Path $root 'tools\hlslcheck.cpp') -o (Join-Path $out 'hlslcheck.exe') -ld3dcompiler_47 2>&1 | Out-File -Encoding utf8 (Join-Path $out 'hlslcheck.log')
+if ($LASTEXITCODE -ne 0) { throw 'HLSL check could not be built' }
+& (Join-Path $out 'hlslcheck.exe')
+if ($LASTEXITCODE -ne 0) { throw 'HLSL shaders do not compile' }
 Write-Output ("built {0} ({1} bytes)" -f $dll, (Get-Item $dll).Length)
 
 if ($NoPackage) { return }

@@ -95,6 +95,9 @@ struct State {
     int rings = 0, plus = 0;
     double plus_time = -10, drift_time = 0, last_pay[int(RingRule::count)] = {-100, -100, -100, -100};
     bool was_boosting = false;
+    float blur = 0, aura = 0;
+    double burst_at = -100;
+    V3 burst_pos;
     float speed_kmh = 0, shown_kmh = 0, heading = 0, turn_rate = 0, lean = 0;
     bool heading_set = false, air = false;
     double ground_lost = 0, air_time = 0, run_time = 0, last_frame = 0, first_shown = -1;
@@ -131,6 +134,9 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     scene.shadow = false;
     scene.rings.clear();
     scene.texts.clear();
+    scene.sprites.clear();
+    scene.blur = 0;
+    scene.aura = 0;
     const double dt = s.last_frame ? std::min(0.1, now - s.last_frame) : 0.016;
     s.last_frame = now;
     if (!d) {
@@ -226,7 +232,10 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         if (s.drift_time >= row.everySeconds) { s.drift_time -= row.everySeconds; pay(RingRule::drift, row.rings, now, origin); }
     } else s.drift_time = 0;
     const bool boosting = s.state == int(sheets::State::boost) || drifting;
-    if (boosting && !s.was_boosting) pay(RingRule::boost, ringRules[int(RingRule::boost)].rings, now, origin);
+    if (boosting && !s.was_boosting) {
+        pay(RingRule::boost, ringRules[int(RingRule::boost)].rings, now, origin);
+        s.burst_at = now; s.burst_pos = origin;
+    }
     s.was_boosting = boosting;
     if (boosting && s.speed_kmh > 100) testmode::report_boosting();
     for (int i = 0; i < f->picked; ++i) {
@@ -300,6 +309,38 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
             scene.shadow_corners[i][2] = feet.z + 0.02f;
         }
         if (s.first_shown < 0) s.first_shown = now;
+    }
+
+    // ---------------- Frontiers boost effect: speed blur, aura, flash when a boost starts
+    if (f->onFoot) {
+        const float fast = std::max(0.0f, std::min(1.0f, (s.speed_kmh - tuning::blurStartKmh) / std::max(1.0f, tuning::blurFullKmh - tuning::blurStartKmh)));
+        const double burst_age = now - s.burst_at;
+        const float burst = burst_age < tuning::burstSeconds ? float(1 - burst_age / tuning::burstSeconds) : 0.0f;
+        const float want_blur = std::min(1.0f, fast * (f->boost ? 1.0f : tuning::blurWithoutBoost) + burst * 0.6f);
+        s.blur += (want_blur - s.blur) * std::min(1.0f, float(dt) * 6);
+        const bool lit = boosting || (f->boost && s.speed_kmh > 30) || s.state == int(sheets::State::fast);
+        const float rate = float(dt) / std::max(0.01f, lit ? tuning::auraFadeIn : tuning::auraFadeOut);
+        s.aura = lit ? std::min(1.0f, s.aura + rate) : std::max(0.0f, s.aura - rate);
+        scene.blur = s.blur;
+        scene.aura = s.aura * tuning::auraOpacity;
+        scene.aura_time = float(std::fmod(now, 1000.0));
+        // streaks point at Sonic's chest on screen
+        const V3 chest = feet + V3{0, 0, 0.6f};
+        const float vx = dot(chest - cam, right), vy = dot(chest - cam, up), vz = dot(chest - cam, fwd);
+        if (vz > 0.1f) {
+            const float ndc_x = vx * xs / vz, ndc_y = vy * ys / vz;
+            scene.blur_center[0] = std::max(0.25f, std::min(0.75f, ndc_x * 0.5f + 0.5f));
+            scene.blur_center[1] = std::max(0.25f, std::min(0.75f, 0.5f - ndc_y * 0.5f));
+        }
+        if (burst > 0) {
+            // follows Sonic a little, like Frontiers' boost_impact trailing him
+            const V3 at = s.burst_pos + (origin - s.burst_pos) * 0.7f;
+            const float grow = float(burst_age / tuning::burstSeconds);
+            scene.sprites.push_back({{at.x, at.y, at.z}, 1.6f + 1.2f * grow, burst * burst, float(now * 2), 0});
+            scene.sprites.push_back({{at.x, at.y, at.z}, 0.6f + tuning::burstMeters * grow, burst, float(-now * 1.5), 1});
+        }
+    } else {
+        s.blur = s.aura = 0;
     }
 
     // ---------------- Frontiers rings placed by the mod's Lua on BeamNG's ground

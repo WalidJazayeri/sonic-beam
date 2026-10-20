@@ -46,6 +46,24 @@ bool load_all()
         mod::log("assets: ring: %s", error.c_str());
         return false;
     }
+    // Boost effect: the aura mesh rides Sonic's skeleton (same bones, same order), the textures are
+    // the ones Frontiers uses for its boost aura and boost_impact flash.
+    {
+        frontiers::Pac effect_pac;
+        auto texture = [&](const frontiers::Pac &pac, const sheets::AssetRow &row, frontiers::Texture &out) {
+            const frontiers::PacEntry *e = pac.find(row.entry);
+            return e && frontiers::parse_dds(*e, out, error);
+        };
+        bool ok = frontiers::parse_model(sonic_pac, sheets::boost_aura_model.entry, data.aura, error) &&
+                  data.aura.nodes.size() == data.sonic.nodes.size() &&
+                  texture(sonic_pac, sheets::boost_aura_texture, data.aura_texture) &&
+                  effect_pac.load(root + L"\\" + sheets::boost_glow_texture.archive, error) &&
+                  texture(effect_pac, sheets::boost_glow_texture, data.glow_texture) &&
+                  texture(effect_pac, sheets::boost_wave_texture, data.wave_texture);
+        data.boost_fx = ok;
+        if (ok) mod::log("assets: boost aura %zu vertices, effect textures %ux%u", data.aura.vertices.size(), data.aura_texture.width, data.aura_texture.height);
+        else mod::log("assets: boost effect unavailable (%s) - continuing without it", error.c_str());
+    }
     for (auto &row : sheets::sounds) {
         frontiers::AcbBank bank;
         frontiers::Pcm pcm;

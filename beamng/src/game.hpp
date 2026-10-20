@@ -21,6 +21,15 @@ struct Text {
     std::string text;
 };
 
+// Frontiers boost_impact flash: a camera-facing sprite (glow or shock wave) in the world.
+struct Sprite {
+    float pos[3];
+    float size;                    // metres, full width
+    float alpha;
+    float spin;                    // radians
+    int kind;                      // 0 glow flash, 1 shock wave
+};
+
 struct Scene {
     bool camera = false;           // view/proj valid this frame
     float view[16], proj[16];      // row vectors, reversed infinite depth
@@ -31,6 +40,12 @@ struct Scene {
     float shadow_corners[4][3];    // world space
     std::vector<Instance> rings;
     std::vector<Text> texts;
+    // boost effect
+    float blur = 0;                // 0..1 speed blur strength
+    float blur_center[2] = {0.5f, 0.5f};   // where streaks point, 0..1 screen coordinates
+    float aura = 0;                // 0..1 aura brightness (drawn on Sonic's pose)
+    float aura_time = 0;           // seconds, scrolls the aura pattern
+    std::vector<Sprite> sprites;
 };
 
 // frame: latest data from Lua (null before the first one). aspect: back buffer width / height.

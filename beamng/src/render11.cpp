@@ -25,6 +25,7 @@
 #include "game.hpp"
 #include "testmode.hpp"
 #include "render12.hpp"
+#include "shared_draw.hpp"
 
 namespace {
 
@@ -33,52 +34,9 @@ int attach_tries = 0;
 
 template <class T> void release(T *&p) { if (p) { p->Release(); p = nullptr; } }
 
-const char kShader[] = R"(
-cbuffer Draw : register(b0) { row_major float4x4 modelView; row_major float4x4 proj; float4 tint; float4 params; };
-cbuffer Bones : register(b1) { float4 bones[768]; };
-Texture2D tex : register(t0);
-SamplerState wrapS : register(s0);
-SamplerState clampS : register(s1);
-SamplerState pointS : register(s2);
-struct VSIn { float3 p : POSITION; float3 n : NORMAL; float2 uv : TEXCOORD0; uint4 j : BLENDINDICES; float4 w : BLENDWEIGHT; };
-struct PSIn { float4 pos : SV_Position; float3 n : NORMAL; float2 uv : TEXCOORD0; float3 v : TEXCOORD1; };
-float3 skinP(float4 p, uint j) { return float3(dot(bones[j * 3], p), dot(bones[j * 3 + 1], p), dot(bones[j * 3 + 2], p)); }
-float3 skinN(float3 n, uint j) { return float3(dot(bones[j * 3].xyz, n), dot(bones[j * 3 + 1].xyz, n), dot(bones[j * 3 + 2].xyz, n)); }
-float3 output(float3 rgb) {
-    if (params.w > 1.5) return pow(max(rgb, 0), 2.2);             // sRGB target: the view encodes
-    if (params.w > 0.5) return pow(max(rgb, 0), 2.2) * 2.5;       // scRGB HDR target
-    return rgb;
-}
-PSIn vsMesh(VSIn i) {
-    float4 p = float4(i.p, 1); float3 sp = 0, sn = 0;
-    [unroll] for (int k = 0; k < 4; k++) { float w = i.w[k]; if (w > 0) { sp += w * skinP(p, i.j[k]); sn += w * skinN(i.n, i.j[k]); } }
-    float4 vp = mul(float4(sp, 1), modelView);
-    PSIn o; o.v = vp.xyz; o.pos = mul(vp, proj); o.n = mul(float4(sn, 0), modelView).xyz; o.uv = i.uv; return o;
-}
-float4 psMesh(PSIn i) : SV_Target {
-    float4 c = params.y > 0.5 ? tex.Sample(clampS, i.uv) : tex.Sample(wrapS, i.uv);
-    clip(c.a - 0.5);
-    float3 n = normalize(i.n + 1e-6);
-    float3 L = normalize(float3(0.35, 0.85, -0.4));
-    float ndl = dot(n, L);
-    float3 V = normalize(-i.v);
-    float rim = pow(1 - saturate(abs(dot(n, V))), 3) * 0.3;
-    float light = 0.55 + 0.6 * saturate(ndl) + rim + params.z;
-    return float4(output(c.rgb * tint.rgb * light), tint.a);
-}
-struct FIn { float3 p : POSITION; float2 uv : TEXCOORD0; float4 c : COLOR; };
-struct FOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; float4 c : COLOR; };
-FOut vsFlat(FIn i) { FOut o; o.pos = mul(mul(float4(i.p, 1), modelView), proj); o.uv = i.uv; o.c = i.c; return o; }
-float4 psFlat(FOut i) : SV_Target {
-    float a;
-    if (params.x > 0.5) { float d = saturate(1 - length(i.uv * 2 - 1)); a = d * d; }
-    else a = tex.Sample(pointS, i.uv).r;
-    return float4(output(i.c.rgb), i.c.a * a);
-}
-)";
 
-struct DrawConstants { float model_view[16], proj[16], tint[4], params[4]; };
-struct FlatVertex { float p[3], uv[2], c[4]; };
+using draw::DrawConstants;
+using draw::FlatVertex;
 
 struct GpuMesh {
     ID3D11Buffer *vb = nullptr, *ib = nullptr;
@@ -98,18 +56,23 @@ struct Renderer {
     UINT width = 0, height = 0;
     DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
     int color_mode = 0;                            // 0 UNORM, 1 scRGB, 2 sRGB
-    ID3D11VertexShader *vs_mesh = nullptr, *vs_flat = nullptr;
-    ID3D11PixelShader *ps_mesh = nullptr, *ps_flat = nullptr;
+    ID3D11VertexShader *vs_mesh = nullptr, *vs_flat = nullptr, *vs_aura = nullptr, *vs_post = nullptr;
+    ID3D11PixelShader *ps_mesh = nullptr, *ps_flat = nullptr, *ps_aura = nullptr, *ps_post = nullptr;
     ID3D11InputLayout *layout_mesh = nullptr, *layout_flat = nullptr;
     ID3D11Buffer *cb_draw = nullptr, *cb_bones = nullptr, *flat_vb = nullptr;
     UINT flat_capacity = 0;
     ID3D11SamplerState *samplers[3] = {};
-    ID3D11BlendState *blend = nullptr;
-    ID3D11DepthStencilState *depth_on = nullptr, *depth_off = nullptr;
+    ID3D11BlendState *blend = nullptr, *blend_add = nullptr, *blend_off = nullptr;
+    ID3D11DepthStencilState *depth_on = nullptr, *depth_off = nullptr, *depth_test = nullptr;
     ID3D11RasterizerState *raster = nullptr;
     std::vector<ID3D11ShaderResourceView *> textures;
     int font_texture = 0, white_texture = 0;
-    GpuMesh sonic, ring;
+    GpuMesh sonic, ring, aura;
+    bool has_aura = false;
+    int aura_texture = -1, glow_texture = -1, wave_texture = -1;
+    ID3D11Texture2D *copy = nullptr;               // copy of BeamNG's frame for the speed blur
+    ID3D11ShaderResourceView *copy_srv = nullptr;
+    UINT copy_w = 0, copy_h = 0;
     bool ready = false, disabled = false, uploaded = false;
     uint64_t frames_drawn = 0;
     game::Scene scene;
@@ -134,11 +97,11 @@ void set_status(const char *text) { std::snprintf(status, sizeof(status), "%s", 
 
 bool create_pipeline()
 {
-    ID3DBlob *code[4] = {}, *errors = nullptr;
-    const char *entries[4] = {"vsMesh", "psMesh", "vsFlat", "psFlat"};
-    const char *targets[4] = {"vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0"};
-    for (int i = 0; i < 4; ++i) {
-        if (FAILED(D3DCompile(kShader, sizeof(kShader) - 1, "sonic_beam", nullptr, nullptr, entries[i], targets[i], D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code[i], &errors))) {
+    ID3DBlob *code[8] = {}, *errors = nullptr;
+    const char *entries[8] = {"vsMesh", "psMesh", "vsFlat", "psFlat", "vsAura", "psAura", "vsPost", "psPost"};
+    const char *targets[8] = {"vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0"};
+    for (int i = 0; i < 8; ++i) {
+        if (FAILED(D3DCompile(draw::kShader, sizeof(draw::kShader) - 1, "sonic_beam", nullptr, nullptr, entries[i], targets[i], D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code[i], &errors))) {
             if (errors) mod::log("render: shader %s: %s", entries[i], static_cast<const char *>(errors->GetBufferPointer()));
             release(errors);
             for (auto *c : code) if (c) c->Release();
@@ -149,7 +112,11 @@ bool create_pipeline()
     bool ok = SUCCEEDED(r.device->CreateVertexShader(code[0]->GetBufferPointer(), code[0]->GetBufferSize(), nullptr, &r.vs_mesh)) &&
               SUCCEEDED(r.device->CreatePixelShader(code[1]->GetBufferPointer(), code[1]->GetBufferSize(), nullptr, &r.ps_mesh)) &&
               SUCCEEDED(r.device->CreateVertexShader(code[2]->GetBufferPointer(), code[2]->GetBufferSize(), nullptr, &r.vs_flat)) &&
-              SUCCEEDED(r.device->CreatePixelShader(code[3]->GetBufferPointer(), code[3]->GetBufferSize(), nullptr, &r.ps_flat));
+              SUCCEEDED(r.device->CreatePixelShader(code[3]->GetBufferPointer(), code[3]->GetBufferSize(), nullptr, &r.ps_flat)) &&
+              SUCCEEDED(r.device->CreateVertexShader(code[4]->GetBufferPointer(), code[4]->GetBufferSize(), nullptr, &r.vs_aura)) &&
+              SUCCEEDED(r.device->CreatePixelShader(code[5]->GetBufferPointer(), code[5]->GetBufferSize(), nullptr, &r.ps_aura)) &&
+              SUCCEEDED(r.device->CreateVertexShader(code[6]->GetBufferPointer(), code[6]->GetBufferSize(), nullptr, &r.vs_post)) &&
+              SUCCEEDED(r.device->CreatePixelShader(code[7]->GetBufferPointer(), code[7]->GetBufferSize(), nullptr, &r.ps_post));
     const D3D11_INPUT_ELEMENT_DESC mesh_input[] = {
         {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
         {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
@@ -184,11 +151,17 @@ bool create_pipeline()
     blend.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
     blend.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_RED | D3D11_COLOR_WRITE_ENABLE_GREEN | D3D11_COLOR_WRITE_ENABLE_BLUE;
     ok = ok && SUCCEEDED(r.device->CreateBlendState(&blend, &r.blend));
+    blend.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;              // boost glow: additive
+    ok = ok && SUCCEEDED(r.device->CreateBlendState(&blend, &r.blend_add));
+    blend.RenderTarget[0].BlendEnable = FALSE;                      // speed blur: replaces the frame
+    ok = ok && SUCCEEDED(r.device->CreateBlendState(&blend, &r.blend_off));
     D3D11_DEPTH_STENCIL_DESC ds{};
     ds.DepthEnable = TRUE; ds.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL; ds.DepthFunc = D3D11_COMPARISON_GREATER_EQUAL;
     ok = ok && SUCCEEDED(r.device->CreateDepthStencilState(&ds, &r.depth_on));
     ds.DepthEnable = FALSE; ds.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
     ok = ok && SUCCEEDED(r.device->CreateDepthStencilState(&ds, &r.depth_off));
+    ds.DepthEnable = TRUE;                                          // the aura hides behind Sonic, writes no depth
+    ok = ok && SUCCEEDED(r.device->CreateDepthStencilState(&ds, &r.depth_test));
     D3D11_RASTERIZER_DESC rs{};
     rs.FillMode = D3D11_FILL_SOLID; rs.CullMode = D3D11_CULL_NONE; rs.DepthClipEnable = TRUE;
     ok = ok && SUCCEEDED(r.device->CreateRasterizerState(&rs, &r.raster));
@@ -235,9 +208,30 @@ bool upload_mesh(const frontiers::Model &m, GpuMesh &g)
     return true;
 }
 
+ID3D11ShaderResourceView *texture_view(const frontiers::Texture &t)
+{
+    std::vector<D3D11_SUBRESOURCE_DATA> mips;
+    for (UINT i = 0; i < t.mips; ++i) {
+        const UINT w = std::max(1u, t.width >> i);
+        D3D11_SUBRESOURCE_DATA sd{};
+        sd.pSysMem = t.data.data() + t.mip_offset[i];
+        sd.SysMemPitch = t.compressed ? ((w + 3) / 4) * t.block_bytes : w * 4;
+        mips.push_back(sd);
+    }
+    return make_texture(t.width, t.height, t.mips, DXGI_FORMAT(t.dxgi), mips);
+}
+
 bool upload_assets(const assets::Data &d)
 {
     if (!upload_mesh(d.sonic, r.sonic) || !upload_mesh(d.ring, r.ring)) return false;
+    if (d.boost_fx && upload_mesh(d.aura, r.aura)) {
+        const int base = int(r.textures.size());
+        r.textures.push_back(texture_view(d.aura_texture));
+        r.textures.push_back(texture_view(d.glow_texture));
+        r.textures.push_back(texture_view(d.wave_texture));
+        r.has_aura = r.textures[base] && r.textures[base + 1] && r.textures[base + 2];
+        if (r.has_aura) { r.aura_texture = base; r.glow_texture = base + 1; r.wave_texture = base + 2; }
+    }
     static uint8_t atlas[font::atlas_w * font::atlas_h];
     font::build_atlas(atlas);
     r.font_texture = int(r.textures.size());
@@ -252,6 +246,7 @@ bool upload_assets(const assets::Data &d)
 void release_targets()
 {
     release(r.rtv); release(r.dsv); release(r.depth);
+    release(r.copy_srv); release(r.copy); r.copy_w = r.copy_h = 0;
     r.width = r.height = 0;
 }
 
@@ -387,6 +382,79 @@ void draw_mesh(const GpuMesh &g, const float *model, const float *view, const fl
     }
 }
 
+void bind_constants(const DrawConstants &dc)
+{
+    D3D11_MAPPED_SUBRESOURCE m;
+    if (SUCCEEDED(r.context->Map(r.cb_draw, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
+        std::memcpy(m.pData, &dc, sizeof(dc));
+        r.context->Unmap(r.cb_draw, 0);
+    }
+}
+
+// Speed blur: copy BeamNG's finished frame, then draw it back streaked toward Sonic.
+void draw_speed_blur(const game::Scene &scene)
+{
+    ID3D11Resource *back = nullptr;
+    r.rtv->GetResource(&back);
+    if (!back) return;
+    if (!r.copy || r.copy_w != r.width || r.copy_h != r.height) {
+        release(r.copy_srv); release(r.copy);
+        D3D11_TEXTURE2D_DESC td{};
+        static_cast<ID3D11Texture2D *>(back)->GetDesc(&td);
+        td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_SHADER_RESOURCE; td.CPUAccessFlags = 0; td.MiscFlags = 0;
+        D3D11_SHADER_RESOURCE_VIEW_DESC sv{};
+        sv.Format = r.format; sv.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D; sv.Texture2D.MipLevels = 1;
+        if (FAILED(r.device->CreateTexture2D(&td, nullptr, &r.copy)) || FAILED(r.device->CreateShaderResourceView(r.copy, &sv, &r.copy_srv))) {
+            release(r.copy_srv); release(r.copy); back->Release();
+            mod::log("render: no copy of the frame for the speed blur");
+            return;
+        }
+        r.copy_w = r.width; r.copy_h = r.height;
+    }
+    r.context->CopyResource(r.copy, back);
+    back->Release();
+    DrawConstants dc{};
+    std::memcpy(dc.model_view, draw::kIdentity, 64); std::memcpy(dc.proj, draw::kIdentity, 64);
+    dc.tint[0] = scene.blur_center[0]; dc.tint[1] = scene.blur_center[1]; dc.tint[2] = scene.blur * sheets::tuning::blurStrength;
+    dc.params[3] = float(r.color_mode);
+    bind_constants(dc);
+    const float factor[4] = {};
+    r.context->OMSetBlendState(r.blend_off, factor, 0xffffffff);
+    r.context->OMSetDepthStencilState(r.depth_off, 0);
+    r.context->IASetInputLayout(nullptr);
+    r.context->VSSetShader(r.vs_post, nullptr, 0);
+    r.context->PSSetShader(r.ps_post, nullptr, 0);
+    r.context->PSSetShaderResources(0, 1, &r.copy_srv);
+    r.context->Draw(3, 0);
+    ID3D11ShaderResourceView *none = nullptr;
+    r.context->PSSetShaderResources(0, 1, &none);
+    r.context->OMSetBlendState(r.blend, factor, 0xffffffff);
+}
+
+// Frontiers' boost aura: the aura mesh on Sonic's pose (bones already bound), additive.
+void draw_aura(const game::Scene &scene, int layer)
+{
+    float mv[16];
+    draw::mul(scene.sonic_model, scene.view, mv);
+    DrawConstants dc{};
+    std::memcpy(dc.model_view, mv, 64); std::memcpy(dc.proj, scene.proj, 64);
+    dc.tint[0] = 0.25f; dc.tint[1] = 0.55f; dc.tint[2] = 1.0f; dc.tint[3] = scene.aura * (layer ? 0.35f : 0.6f);
+    dc.params[0] = layer ? -0.085f : -0.03f;  // a close shell and a wider halo (the aura mesh is inside-out: its normals point in) dc.params[1] = scene.aura_time; dc.params[3] = float(r.color_mode);
+    bind_constants(dc);
+    const float factor[4] = {};
+    r.context->OMSetBlendState(r.blend_add, factor, 0xffffffff);
+    r.context->OMSetDepthStencilState(r.depth_test, 0);
+    const UINT stride = sizeof(frontiers::Vertex), offset = 0;
+    r.context->IASetVertexBuffers(0, 1, &r.aura.vb, &stride, &offset);
+    r.context->IASetIndexBuffer(r.aura.ib, DXGI_FORMAT_R16_UINT, 0);
+    r.context->IASetInputLayout(r.layout_mesh);
+    r.context->VSSetShader(r.vs_aura, nullptr, 0);
+    r.context->PSSetShader(r.ps_aura, nullptr, 0);
+    r.context->PSSetShaderResources(0, 1, &r.textures[r.aura_texture]);
+    for (auto &m : r.aura.meshes) r.context->DrawIndexed(m.index_count, m.first_index, INT(m.base_vertex));
+    r.context->OMSetBlendState(r.blend, factor, 0xffffffff);
+}
+
 void draw_frame(IDXGISwapChain *chain)
 {
     const double now = mod::now_seconds();
@@ -439,6 +507,7 @@ void draw_frame(IDXGISwapChain *chain)
     r.context->PSSetSamplers(0, 3, r.samplers);
     static const float kIdentity[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
     bool drew_sonic = false;
+    if (scene.camera && scene.blur > 0.01f) draw_speed_blur(scene);
     if (scene.camera) {
         if (scene.shadow) {
             std::vector<FlatVertex> v;
@@ -453,6 +522,7 @@ void draw_frame(IDXGISwapChain *chain)
             bind_bones(scene.pose.data(), scene.pose.size());
             draw_mesh(r.sonic, scene.sonic_model, scene.view, scene.proj, 1, 0);
             drew_sonic = true;
+            if (r.has_aura && scene.aura > 0.01f) { draw_aura(scene, 0); draw_aura(scene, 1); }
         }
     }
     if (!scene.rings.empty()) {
@@ -466,6 +536,13 @@ void draw_frame(IDXGISwapChain *chain)
             if (inst.screen) draw_mesh(r.ring, inst.model, nullptr, kIdentity, inst.alpha, 0.25f);
             else if (scene.camera) draw_mesh(r.ring, inst.model, scene.view, scene.proj, inst.alpha, 0.25f);
         }
+    }
+    if (scene.camera && r.has_aura && !scene.sprites.empty()) {
+        const float factor[4] = {};
+        r.context->OMSetBlendState(r.blend_add, factor, 0xffffffff);
+        draw_flat(draw::sprite_vertices(scene, 0), scene.view, scene.proj, 2, r.glow_texture);
+        draw_flat(draw::sprite_vertices(scene, 1), scene.view, scene.proj, 3, r.wave_texture);
+        r.context->OMSetBlendState(r.blend, factor, 0xffffffff);
     }
     if (!scene.texts.empty()) {
         std::vector<FlatVertex> v;

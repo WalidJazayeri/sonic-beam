@@ -62,6 +62,7 @@ struct Context {
     int color_mode = 0;
     ID3D12RootSignature *root = nullptr;
     ID3D12PipelineState *mesh = nullptr, *flat = nullptr;
+    ID3D12PipelineState *aura = nullptr, *glow = nullptr, *post = nullptr;   // boost effect
     DXGI_FORMAT pipeline_format = DXGI_FORMAT_UNKNOWN;
     bool uploaded = false;
     std::vector<ID3D12Resource *> textures, staging;
@@ -69,7 +70,12 @@ struct Context {
     ID3D12DescriptorHeap *srv = nullptr;
     UINT srv_stride = 0;
     int font_texture = 0, white_texture = 0;
-    GpuMesh sonic, ring;
+    GpuMesh sonic, ring, aura_mesh;
+    bool has_aura = false;
+    int aura_texture = -1, glow_texture = -1, wave_texture = -1;
+    int copy_slot = -1;                           // descriptor of the frame copy the speed blur reads
+    ID3D12Resource *copy = nullptr;
+    UINT copy_w = 0, copy_h = 0;
 } c;
 
 D3D12_HEAP_PROPERTIES heap(D3D12_HEAP_TYPE type) { D3D12_HEAP_PROPERTIES h{}; h.Type = type; return h; }
@@ -106,6 +112,7 @@ void release_targets()
     for (auto *b : c.backbuffers) if (b) b->Release();
     c.backbuffers.clear();
     release(c.rtv); release(c.dsv); release(c.depth);
+    release(c.copy); c.copy_w = c.copy_h = 0;
     c.width = c.height = 0;
 }
 
@@ -147,12 +154,12 @@ bool init_context()
 bool build_pipelines(DXGI_FORMAT format)
 {
     if (c.pipeline_format == format && c.mesh) return true;
-    release(c.mesh); release(c.flat);
-    ID3DBlob *code[4] = {}, *errors = nullptr;
-    const char *entries[4] = {"vsMesh", "psMesh", "vsFlat", "psFlat"};
-    const char *targets[4] = {"vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0"};
+    release(c.mesh); release(c.flat); release(c.aura); release(c.glow); release(c.post);
+    ID3DBlob *code[8] = {}, *errors = nullptr;
+    const char *entries[8] = {"vsMesh", "psMesh", "vsFlat", "psFlat", "vsAura", "psAura", "vsPost", "psPost"};
+    const char *targets[8] = {"vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0"};
     bool ok = true;
-    for (int i = 0; i < 4 && ok; ++i) {
+    for (int i = 0; i < 8 && ok; ++i) {
         ok = SUCCEEDED(D3DCompile(draw::kShader, sizeof(draw::kShader) - 1, "sonic_beam", nullptr, nullptr, entries[i], targets[i], D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code[i], &errors));
         if (!ok && errors) mod::log("render12: shader %s: %s", entries[i], static_cast<const char *>(errors->GetBufferPointer()));
         release(errors);
@@ -189,6 +196,19 @@ bool build_pipelines(DXGI_FORMAT format)
         pd.VS = {code[2]->GetBufferPointer(), code[2]->GetBufferSize()}; pd.PS = {code[3]->GetBufferPointer(), code[3]->GetBufferSize()};
         pd.InputLayout = {flat_input, 3};
         ok = ok && SUCCEEDED(c.device->CreateGraphicsPipelineState(&pd, IID_PPV_ARGS(&c.flat)));
+        // boost effect: additive glow (flash sprites, aura) and the full-screen speed blur
+        blend.SrcBlend = D3D12_BLEND_SRC_ALPHA; blend.DestBlend = D3D12_BLEND_ONE;
+        ok = ok && SUCCEEDED(c.device->CreateGraphicsPipelineState(&pd, IID_PPV_ARGS(&c.glow)));
+        pd.DepthStencilState.DepthEnable = TRUE;   // the aura hides behind Sonic's body, writes no depth
+        pd.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+        pd.VS = {code[4]->GetBufferPointer(), code[4]->GetBufferSize()}; pd.PS = {code[5]->GetBufferPointer(), code[5]->GetBufferSize()};
+        pd.InputLayout = {mesh_input, 5};
+        ok = ok && SUCCEEDED(c.device->CreateGraphicsPipelineState(&pd, IID_PPV_ARGS(&c.aura)));
+        pd.DepthStencilState.DepthEnable = FALSE;
+        blend.BlendEnable = FALSE;
+        pd.VS = {code[6]->GetBufferPointer(), code[6]->GetBufferSize()}; pd.PS = {code[7]->GetBufferPointer(), code[7]->GetBufferSize()};
+        pd.InputLayout = {nullptr, 0};
+        ok = ok && SUCCEEDED(c.device->CreateGraphicsPipelineState(&pd, IID_PPV_ARGS(&c.post)));
     }
     for (auto *b : code) if (b) b->Release();
     if (ok) c.pipeline_format = format;
@@ -251,7 +271,13 @@ bool upload_assets(const assets::Data &d)
     static const uint8_t white[4] = {255, 255, 255, 255};
     c.white_texture = int(sources.size());
     sources.push_back({nullptr, white, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM, 4});
-    D3D12_DESCRIPTOR_HEAP_DESC hd{D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, UINT(sources.size()), D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0};
+    if (d.boost_fx) {
+        c.aura_texture = int(sources.size()); sources.push_back({&d.aura_texture, nullptr, 0, 0, 0, 0});
+        c.glow_texture = int(sources.size()); sources.push_back({&d.glow_texture, nullptr, 0, 0, 0, 0});
+        c.wave_texture = int(sources.size()); sources.push_back({&d.wave_texture, nullptr, 0, 0, 0, 0});
+    }
+    c.copy_slot = int(sources.size());            // filled by ensure_copy
+    D3D12_DESCRIPTOR_HEAP_DESC hd{D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, UINT(sources.size() + 1), D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0};
     if (FAILED(c.device->CreateDescriptorHeap(&hd, IID_PPV_ARGS(&c.srv)))) return false;
     c.srv_stride = c.device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     auto upload_buffer = [&](const void *data, UINT64 size, ID3D12Resource *&out) {
@@ -276,6 +302,7 @@ bool upload_assets(const assets::Data &d)
         return true;
     };
     if (!mesh(d.sonic, c.sonic) || !mesh(d.ring, c.ring)) return false;
+    c.has_aura = d.boost_fx && mesh(d.aura, c.aura_mesh);
     for (size_t i = 0; i < sources.size(); ++i) {
         const Source &s = sources[i];
         D3D12_RESOURCE_DESC td{};
@@ -343,13 +370,14 @@ D3D12_GPU_VIRTUAL_ADDRESS constants(Frame &f, const float *model_view, const flo
     return push(f, &dc, sizeof(dc));
 }
 
-void draw_flat(Frame &f, const std::vector<draw::FlatVertex> &v, const float *model_view, const float *proj, float mode, int texture)
+void draw_flat(Frame &f, const std::vector<draw::FlatVertex> &v, const float *model_view, const float *proj, float mode, int texture,
+               ID3D12PipelineState *pipeline = nullptr)
 {
-    if (v.empty()) return;
+    if (v.empty() || texture < 0) return;
     const auto vb = push(f, v.data(), v.size() * sizeof(draw::FlatVertex), 16);
     const auto cb = constants(f, model_view, proj, 1, 0, 0, mode);
     if (!vb || !cb) return;
-    c.list->SetPipelineState(c.flat);
+    c.list->SetPipelineState(pipeline ? pipeline : c.flat);
     c.list->SetGraphicsRootConstantBufferView(0, cb);
     c.list->SetGraphicsRootConstantBufferView(1, cb);
     c.list->SetGraphicsRootDescriptorTable(2, srv_handle(texture));
@@ -373,6 +401,47 @@ void draw_mesh(Frame &f, const GpuMesh &g, D3D12_GPU_VIRTUAL_ADDRESS bones, cons
         c.list->SetGraphicsRootDescriptorTable(2, srv_handle(m.texture >= 0 ? g.texture_base + m.texture : c.white_texture));
         c.list->DrawIndexedInstanced(m.index_count, 1, m.first_index, INT(m.base_vertex), 0);
     }
+}
+
+// Frontiers' boost aura: the aura mesh on Sonic's pose (same bones), additive.
+void draw_aura(Frame &f, D3D12_GPU_VIRTUAL_ADDRESS bones, const game::Scene &scene, int layer)
+{
+    float mv[16];
+    draw::mul(scene.sonic_model, scene.view, mv);
+    draw::DrawConstants dc{};
+    std::memcpy(dc.model_view, mv, 64); std::memcpy(dc.proj, scene.proj, 64);
+    dc.tint[0] = 0.25f; dc.tint[1] = 0.55f; dc.tint[2] = 1.0f; dc.tint[3] = scene.aura * (layer ? 0.35f : 0.6f);
+    dc.params[0] = layer ? -0.085f : -0.03f;  // a close shell and a wider halo (the aura mesh is inside-out: its normals point in) dc.params[1] = scene.aura_time; dc.params[3] = float(c.color_mode);
+    const auto cb = push(f, &dc, sizeof(dc));
+    if (!cb) return;
+    c.list->SetPipelineState(c.aura);
+    c.list->SetGraphicsRootConstantBufferView(0, cb);
+    c.list->SetGraphicsRootConstantBufferView(1, bones);
+    c.list->SetGraphicsRootDescriptorTable(2, srv_handle(c.aura_texture));
+    c.list->IASetVertexBuffers(0, 1, &c.aura_mesh.vbv);
+    c.list->IASetIndexBuffer(&c.aura_mesh.ibv);
+    for (auto &m : c.aura_mesh.meshes) c.list->DrawIndexedInstanced(m.index_count, 1, m.first_index, INT(m.base_vertex), 0);
+}
+
+// The texture the speed blur reads: a copy of the finished BeamNG frame, same size and format.
+bool ensure_copy(ID3D12Resource *backbuffer)
+{
+    if (c.copy && c.copy_w == c.width && c.copy_h == c.height) return true;
+    release(c.copy);
+    D3D12_RESOURCE_DESC td = backbuffer->GetDesc();
+    td.Flags = D3D12_RESOURCE_FLAG_NONE;
+    auto h = heap(D3D12_HEAP_TYPE_DEFAULT);
+    if (FAILED(c.device->CreateCommittedResource(&h, D3D12_HEAP_FLAG_NONE, &td, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, nullptr, IID_PPV_ARGS(&c.copy)))) {
+        mod::log("render12: no copy of the frame for the speed blur");
+        return false;
+    }
+    D3D12_SHADER_RESOURCE_VIEW_DESC sv{};
+    sv.Format = c.format; sv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    sv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; sv.Texture2D.MipLevels = 1;
+    auto handle = c.srv->GetCPUDescriptorHandleForHeapStart(); handle.ptr += UINT64(c.copy_slot) * c.srv_stride;
+    c.device->CreateShaderResourceView(c.copy, &sv, handle);
+    c.copy_w = c.width; c.copy_h = c.height;
+    return true;
 }
 
 } // namespace
@@ -448,7 +517,16 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
     }
     if (!c.uploaded) { c.list->Close(); return true; }
     ID3D12Resource *target = c.backbuffers[index];
-    barrier(target, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    const bool blur = scene.camera && scene.blur > 0.01f && c.post && ensure_copy(target);
+    if (blur) {
+        barrier(target, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        barrier(c.copy, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+        c.list->CopyResource(c.copy, target);
+        barrier(c.copy, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        barrier(target, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    } else {
+        barrier(target, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    }
     auto rtv = c.rtv->GetCPUDescriptorHandleForHeapStart(); rtv.ptr += SIZE_T(index) * c.rtv_stride;
     auto dsv = c.dsv->GetCPUDescriptorHandleForHeapStart();
     c.list->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
@@ -460,12 +538,30 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
     ID3D12DescriptorHeap *heaps[] = {c.srv};
     c.list->SetDescriptorHeaps(1, heaps);
     c.list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    if (blur) {
+        draw::DrawConstants dc{};
+        std::memcpy(dc.model_view, draw::kIdentity, 64); std::memcpy(dc.proj, draw::kIdentity, 64);
+        dc.tint[0] = scene.blur_center[0]; dc.tint[1] = scene.blur_center[1]; dc.tint[2] = scene.blur * sheets::tuning::blurStrength;
+        dc.params[3] = float(c.color_mode);
+        const auto cb = push(f, &dc, sizeof(dc));
+        if (cb) {
+            c.list->SetPipelineState(c.post);
+            c.list->SetGraphicsRootConstantBufferView(0, cb);
+            c.list->SetGraphicsRootConstantBufferView(1, cb);
+            c.list->SetGraphicsRootDescriptorTable(2, srv_handle(c.copy_slot));
+            c.list->DrawInstanced(3, 1, 0, 0);
+        }
+    }
     if (scene.camera && scene.shadow) draw_flat(f, draw::shadow_vertices(scene), scene.view, scene.proj, 1, c.white_texture);
     if (scene.camera && scene.sonic_visible && !scene.pose.empty()) {
         std::vector<float> bones(768 * 4, 0.0f);
         std::memcpy(bones.data(), scene.pose.data(), std::min(bones.size(), scene.pose.size()) * 4);
         const auto b = push(f, bones.data(), bones.size() * 4);
-        if (b) { draw_mesh(f, c.sonic, b, scene.sonic_model, scene.view, scene.proj, 1, 0); drew_sonic = true; }
+        if (b) {
+            draw_mesh(f, c.sonic, b, scene.sonic_model, scene.view, scene.proj, 1, 0);
+            drew_sonic = true;
+            if (c.has_aura && scene.aura > 0.01f) { draw_aura(f, b, scene, 0); draw_aura(f, b, scene, 1); }
+        }
     }
     if (!scene.rings.empty()) {
         static const std::vector<float> identity = draw::identity_bones();
@@ -475,6 +571,10 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
             if (inst.screen) draw_mesh(f, c.ring, b, inst.model, nullptr, draw::kIdentity, inst.alpha, 0.25f);
             else if (scene.camera) draw_mesh(f, c.ring, b, inst.model, scene.view, scene.proj, inst.alpha, 0.25f);
         }
+    }
+    if (scene.camera && !scene.sprites.empty()) {
+        draw_flat(f, draw::sprite_vertices(scene, 0), scene.view, scene.proj, 2, c.glow_texture, c.glow);
+        draw_flat(f, draw::sprite_vertices(scene, 1), scene.view, scene.proj, 3, c.wave_texture, c.glow);
     }
     if (!scene.texts.empty()) draw_flat(f, draw::text_vertices(scene, aspect), draw::kIdentity, draw::kIdentity, 0, c.font_texture);
     barrier(target, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
