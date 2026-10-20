@@ -5,6 +5,14 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.3.0
+- Bruits de pas de Sonic Frontiers (banque `se_rangers_player_sonic.acb` du joueur) :
+  - pas de marche (`sn_walk_…`) et de course (`sn_run_…`), calés sur ses pieds : les contacts sont calculés dans les animations (orteils `Toe_L`/`Toe_R`, 2 par cycle) ; hauteur légèrement variée à chaque pas ;
+  - selon le sol que BeamNG signale sous Sonic : béton (asphalte, roche, pavés, glace…), terre (terre, gravier, boue), herbe, sable, neige, eau, métal ;
+  - atterrissage selon le sol (`sn_land_…`), freinage (`sn_brake`) quand il s'arrête lancé ;
+  - pas de bruits de pas pendant le boost, comme dans Frontiers.
+- Chaque banque de sons n'est lue qu'une fois au chargement.
+
 ## v0.2.3
 - Correctif : en chargeant une carte depuis le menu, Sonic restait dans la voiture (BeamNG annonce le mode Libre un peu après l'apparition de la carte). Le mod attend maintenant 3 s avant de renoncer à mettre le joueur à pied.
 - Raccourci de test : options de lancement Steam sans guillemets (le lanceur de BeamNG plante avec).

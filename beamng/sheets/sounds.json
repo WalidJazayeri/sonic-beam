@@ -10,11 +10,221 @@
     "verified": "decoded and heard in Forza"
   },
   "rows": [
-    {"id": "ring",  "bank": "se_rangers_obj_common.acb",           "cue": "obj_ring",     "volume": 0.55, "maxSeconds": 1.2, "verified": false},
-    {"id": "boost", "bank": "sonic_sound/se_rangers_player_sonic.acb", "cue": "sn_boost_run", "volume": 0.6,  "maxSeconds": 2.5, "verified": false},
-    {"id": "drift", "bank": "sonic_sound/se_rangers_player_sonic.acb", "cue": "sn_drift",     "volume": 0.5,  "maxSeconds": 1.6, "verified": false},
-    {"id": "jump",  "bank": "sonic_sound/se_rangers_player_sonic.acb", "cue": "sn_jump",      "volume": 0.6,  "maxSeconds": 0.9, "verified": false},
-    {"id": "trick", "bank": "sonic_sound/se_rangers_player_sonic.acb", "cue": "sn_airtrick",  "volume": 0.6,  "maxSeconds": 2.4, "verified": false},
-    {"id": "land",  "bank": "sonic_sound/se_rangers_player_sonic.acb", "cue": "sn_land_conc", "volume": 0.6,  "maxSeconds": 0.7, "verified": false}
+    {
+      "id": "ring",
+      "bank": "se_rangers_obj_common.acb",
+      "cue": "obj_ring",
+      "volume": 0.55,
+      "maxSeconds": 1.2,
+      "verified": false
+    },
+    {
+      "id": "boost",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_boost_run",
+      "volume": 0.6,
+      "maxSeconds": 2.5,
+      "verified": false
+    },
+    {
+      "id": "drift",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_drift",
+      "volume": 0.5,
+      "maxSeconds": 1.6,
+      "verified": false
+    },
+    {
+      "id": "jump",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_jump",
+      "volume": 0.6,
+      "maxSeconds": 0.9,
+      "verified": false
+    },
+    {
+      "id": "trick",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_airtrick",
+      "volume": 0.6,
+      "maxSeconds": 2.4,
+      "verified": false
+    },
+    {
+      "id": "land",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_land_conc",
+      "volume": 0.6,
+      "maxSeconds": 0.7,
+      "verified": false
+    },
+    {
+      "id": "step_walk_conc",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_walk_conc",
+      "volume": 0.35,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_walk_dirt",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_walk_dirt",
+      "volume": 0.35,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_walk_gras",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_walk_gras",
+      "volume": 0.35,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_walk_sand",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_walk_sand",
+      "volume": 0.35,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_walk_snow",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_walk_snow",
+      "volume": 0.35,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_walk_watr",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_walk_watr",
+      "volume": 0.35,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_walk_mtlp",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_walk_mtlp",
+      "volume": 0.35,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_run_conc",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_run_conc",
+      "volume": 0.45,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_run_dirt",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_run_dirt",
+      "volume": 0.45,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_run_gras",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_run_gras",
+      "volume": 0.45,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_run_sand",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_run_sand",
+      "volume": 0.45,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_run_snow",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_run_snow",
+      "volume": 0.45,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_run_watr",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_run_watr",
+      "volume": 0.45,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "step_run_mtlp",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_run_mtlp",
+      "volume": 0.45,
+      "maxSeconds": 0.6,
+      "verified": false
+    },
+    {
+      "id": "land_dirt",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_land_dirt",
+      "volume": 0.6,
+      "maxSeconds": 1.0,
+      "verified": false
+    },
+    {
+      "id": "land_gras",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_land_gras",
+      "volume": 0.6,
+      "maxSeconds": 1.0,
+      "verified": false
+    },
+    {
+      "id": "land_sand",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_land_sand",
+      "volume": 0.6,
+      "maxSeconds": 1.0,
+      "verified": false
+    },
+    {
+      "id": "land_snow",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_land_snow",
+      "volume": 0.6,
+      "maxSeconds": 1.0,
+      "verified": false
+    },
+    {
+      "id": "land_watr",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_land_watr",
+      "volume": 0.6,
+      "maxSeconds": 1.0,
+      "verified": false
+    },
+    {
+      "id": "land_mtlp",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_land_mtlp",
+      "volume": 0.6,
+      "maxSeconds": 1.0,
+      "verified": false
+    },
+    {
+      "id": "brake",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_brake",
+      "volume": 0.55,
+      "maxSeconds": 1.5,
+      "verified": false
+    }
   ]
 }

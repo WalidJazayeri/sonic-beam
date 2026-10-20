@@ -34,7 +34,7 @@ bool init(const assets::Data &data)
     return true;
 }
 
-void play(sheets::Sound sound)
+void play(sheets::Sound sound, float pitch)
 {
     if (!engine || !source) return;
     const size_t i = size_t(sound);
@@ -55,6 +55,7 @@ void play(sheets::Sound sound)
     // Restart from the top (a new ring cuts the previous ring sound, like in Frontiers).
     v.voice->Stop();
     v.voice->FlushSourceBuffers();
+    v.voice->SetFrequencyRatio(pitch);
     XAUDIO2_BUFFER buffer{};
     buffer.AudioBytes = UINT32(pcm.samples.size() * sizeof(int16_t));
     buffer.pAudioData = reinterpret_cast<const BYTE *>(pcm.samples.data());

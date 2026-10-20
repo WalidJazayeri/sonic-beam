@@ -43,5 +43,10 @@ int wmain(int argc, wchar_t **argv)
     const float sx = (sonic.min[0] + sonic.max[0]) / 2, sz = (sonic.min[2] + sonic.max[2]) / 2;
     for (auto &v : sonic.vertices) ((v.pos[0] - sx) * v.normal[0] + (v.pos[2] - sz) * v.normal[2] >= 0 ? so : si)++;
     std::printf("sonic normals: %d outward, %d inward\n", so, si);
+    for (size_t i = 0; i < sonic.nodes.size(); ++i) {
+        const std::string &n = sonic.nodes[i].name;
+        if (n.find("Foot") != std::string::npos || n.find("foot") != std::string::npos || n.find("Toe") != std::string::npos || n.find("toe") != std::string::npos)
+            std::printf("  node %zu %s\n", i, n.c_str());
+    }
     return 0;
 }

@@ -19,6 +19,8 @@ struct Data {
     bool boost_fx = false;
     frontiers::Model aura;                  // aura shell on Sonic's own skeleton
     frontiers::Texture aura_texture, glow_texture, wave_texture;
+    // when each foot touches the ground in each clip, as a share of the loop (footstep sounds)
+    std::vector<std::vector<float>> step_phases;   // indexed by sheets::Anim
 };
 
 void start_loading();

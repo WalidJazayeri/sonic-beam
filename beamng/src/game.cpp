@@ -96,6 +96,9 @@ struct State {
     double plus_time = -10, drift_time = 0, last_pay[int(RingRule::count)] = {-100, -100, -100, -100};
     bool was_boosting = false;
     float blur = 0, aura = 0;
+    int step_anim = -1;
+    double step_phase = 0;
+    bool wanted_move = false;
     double burst_at = -100;
     V3 burst_pos;
     float speed_kmh = 0, shown_kmh = 0, heading = 0, turn_rate = 0, lean = 0;
@@ -103,6 +106,11 @@ struct State {
     double ground_lost = 0, air_time = 0, run_time = 0, last_frame = 0, first_shown = -1;
     std::vector<float> scratch;
 } s;
+
+// Frontiers footstep, landing sounds by ground: concrete, dirt, grass, sand, snow, water, metal
+const Sound kWalk[7] = {Sound::step_walk_conc, Sound::step_walk_dirt, Sound::step_walk_gras, Sound::step_walk_sand, Sound::step_walk_snow, Sound::step_walk_watr, Sound::step_walk_mtlp};
+const Sound kRun[7] = {Sound::step_run_conc, Sound::step_run_dirt, Sound::step_run_gras, Sound::step_run_sand, Sound::step_run_snow, Sound::step_run_watr, Sound::step_run_mtlp};
+const Sound kLand[7] = {Sound::land, Sound::land_dirt, Sound::land_gras, Sound::land_sand, Sound::land_snow, Sound::land_watr, Sound::land_mtlp};
 
 void pay(RingRule rule, int amount, double now, V3 origin)
 {
@@ -217,12 +225,13 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         s.state = best;
     }
     const V3 feet = v3(f->feet);
+    const int surface = std::max(0, std::min(6, int(f->surface)));
     const V3 origin = feet + V3{0, 0, 0.6f};
 
     // ---------------- events and rewards (sheets/events.json, rings.json)
     if (landed && landed_air >= landingEvent.minAirSeconds) {
         s.event_until = now + landingEvent.holdSeconds;
-        if (landingEvent.sound >= 0) audio::play(Sound(landingEvent.sound));
+        if (landingEvent.sound >= 0) audio::play(kLand[surface]);
         const RingRuleRow &air = ringRules[int(RingRule::air)];
         if (landed_air >= air.everySeconds) pay(RingRule::air, int(std::round(air.rings * landed_air)), now, origin);
     }
@@ -309,6 +318,30 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
             scene.shadow_corners[i][2] = feet.z + 0.02f;
         }
         if (s.first_shown < 0) s.first_shown = now;
+    }
+
+    // ---------------- Frontiers footsteps, on the ground BeamNG reports under Sonic (none while
+    // boosting, like Frontiers: the boost has its own sound); a brake sound when he stops from speed
+    {
+        const int anim = s.player.anim;
+        const bool stepping = !s.air && f->onFoot && (anim == int(Anim::walk) || anim == int(Anim::run)) &&
+                              size_t(anim) < d->step_phases.size() && d->clips[anim].frames > 1;
+        if (stepping) {
+            const frontiers::Clip &clip = d->clips[anim];
+            const double cycle = double(clip.frames - 1) / clip.rate;
+            const double phase = std::fmod(s.player.time, cycle) / cycle;
+            if (s.step_anim == anim) {
+                for (float at : d->step_phases[anim]) {
+                    const bool crossed = phase >= s.step_phase ? (at > s.step_phase && at <= phase) : (at > s.step_phase || at <= phase);
+                    if (crossed) audio::play(anim == int(Anim::walk) ? kWalk[surface] : kRun[surface], 0.94f + 0.12f * rnd());
+                }
+            }
+            s.step_phase = phase;
+        }
+        s.step_anim = stepping ? anim : -1;
+        const bool wants = f->wantsMove != 0;
+        if (s.wanted_move && !wants && !s.air && f->onFoot && s.speed_kmh > 50) audio::play(Sound::brake);
+        s.wanted_move = wants;
     }
 
     // ---------------- Frontiers boost effect: speed blur, aura, flash when a boost starts

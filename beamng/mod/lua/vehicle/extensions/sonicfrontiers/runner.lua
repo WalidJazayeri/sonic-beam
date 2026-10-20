@@ -24,6 +24,15 @@ local massNodes = {}           -- {cid, weight}: every node, so Sonic's push mov
 local ballNodes = {}
 local ballFriction = {}        -- cid -> {static, sliding} from the jbeam, restored after a glide
 local gliding = false
+local ballNodeSet = {}         -- cid -> true
+local groundMaterial = nil     -- BeamNG ground material id under the ball (nodeCollision)
+-- BeamNG ground material (lua/common/particles.json) -> Frontiers footstep surface:
+-- 0 concrete, 1 dirt, 2 grass, 3 sand, 4 snow, 5 water, 6 metal plate
+local SURFACE = {ASPHALT = 0, ASPHALT_WET = 0, ROCK = 0, COBBLESTONE = 0, RUMBLE_STRIP = 0, SLIPPERY = 0, ICE = 0,
+  WOOD = 0, GLASS = 0, PLASTIC = 0, RUBBER = 0, DIRT = 1, DIRT_DUSTY = 1, GRAVEL = 1, MUD = 1, GRASS = 2, FOLIAGE = 2,
+  FOLIAGE_THIN = 2, SAND = 3, SANDY_ROAD = 3, SNOW = 4, WATER = 5, METAL = 6}
+local materialNames = nil
+local loggedMaterial = nil
 local groundGap = math.huge    -- metres from the ball's bottom down to the ground (updateGFX)
 local snapLock = 0             -- seconds left without ground snap (after a jump)
 local ballCenter, ballRadius = nil, 0
@@ -47,7 +56,7 @@ local function wrapPlayerController()
   local o = pc.sonicfrontiersOriginal
   if not o then
     o = {}
-    for _, k in ipairs({'walkUpDownRaw', 'walkLeftRightRaw', 'walkUpDown', 'walkLeftRight', 'setSpeedCoef', 'toggleSpeedCoef', 'jump', 'setCameraControlData'}) do
+    for _, k in ipairs({'walkUpDownRaw', 'walkLeftRightRaw', 'walkUpDown', 'walkLeftRight', 'setSpeedCoef', 'toggleSpeedCoef', 'jump', 'setCameraControlData', 'nodeCollision'}) do
       o[k] = pc[k]
     end
     pc.sonicfrontiersOriginal = o
@@ -83,6 +92,12 @@ local function wrapPlayerController()
   end
   walkerSpeedCoef = o.setSpeedCoef
   original = o
+  -- the ground the ball touches, for Frontiers' footstep sounds
+  pc.nodeCollision = function(p)
+    if ballNodeSet[p.id1] then groundMaterial = p.materialID1 end   -- materialID2 is the ball's own (cloth)
+    if o.nodeCollision then return o.nodeCollision(p) end
+  end
+  controller.cacheAllControllerFunctions()
   wrapped = true
   return true
 end
@@ -102,6 +117,7 @@ local function findNodes()
     if node.name then byName[node.name] = node.cid end
     if node.tag == 'ball' then
       ballNodes[#ballNodes + 1] = node.cid
+      ballNodeSet[node.cid] = true
       if node.frictionCoef then ballFriction[node.cid] = {node.frictionCoef, node.slidingFrictionCoef or node.frictionCoef} end
     end
   end
@@ -248,6 +264,20 @@ local function onPhysicsStep(dt)
   debugInfo.boosting, debugInfo.grounded, debugInfo.walker, debugInfo.gliding = boosting, grounded, walker ~= nil, gliding
 end
 
+local function surfaceIndex()
+  if not groundMaterial then return 0 end
+  if not materialNames then
+    materialNames = {}
+    for id, m in pairs(particles.getMaterialsParticlesTable() or {}) do materialNames[id] = m.name end
+  end
+  local name = materialNames[groundMaterial]
+  if loggedMaterial ~= groundMaterial then
+    loggedMaterial = groundMaterial
+    log('D', 'sonicfrontiers', 'ground material ' .. tostring(groundMaterial) .. ' = ' .. tostring(name))
+  end
+  return SURFACE[name or ''] or 0
+end
+
 local function updateGFX(dt)
   if not wrapped then wrapPlayerController() end
   if not enabled then return end
@@ -284,7 +314,8 @@ local function updateGFX(dt)
   end
   local _, amount = inputDirection()
   local boosting = (boostHeld > 0.5 and amount > 0.1) and 1 or 0
-  obj:queueGameEngineLua(string.format('if sonicfrontiers_sonic then sonicfrontiers_sonic.onRunner(%d, %d, %d) end', boosting, jumpsToReport, grounded and 1 or 0))
+  obj:queueGameEngineLua(string.format('if sonicfrontiers_sonic then sonicfrontiers_sonic.onRunner(%d, %d, %d, %d, %d) end',
+    boosting, jumpsToReport, grounded and 1 or 0, amount > 0.1 and 1 or 0, surfaceIndex()))
   jumpsToReport = 0
 end
 

@@ -2,6 +2,10 @@
 #include "assets.hpp"
 #include "common.hpp"
 #include "testmode.hpp"
+#include <algorithm>
+#include <cstring>
+#include <map>
+#include <memory>
 
 namespace assets {
 
@@ -64,10 +68,52 @@ bool load_all()
         if (ok) mod::log("assets: boost aura %zu vertices, effect textures %ux%u", data.aura.vertices.size(), data.aura_texture.width, data.aura_texture.height);
         else mod::log("assets: boost effect unavailable (%s) - continuing without it", error.c_str());
     }
+    // Footsteps: a foot lands when its toe comes down through the bottom fifth of its range.
+    {
+        int toes[2] = {-1, -1};
+        for (size_t n = 0; n < data.sonic.nodes.size(); ++n) {
+            if (data.sonic.nodes[n].name == "Toe_L") toes[0] = int(n);
+            if (data.sonic.nodes[n].name == "Toe_R") toes[1] = int(n);
+        }
+        data.step_phases.resize(data.clips.size());
+        for (size_t c = 0; c < data.clips.size() && toes[0] >= 0 && toes[1] >= 0; ++c) {
+            const frontiers::Clip &clip = data.clips[c];
+            if (!sheets::animations[c].loop || clip.frames < 4) continue;
+            for (int toe : toes) {
+                float bind[16];
+                if (!frontiers::math4::inverse_affine(data.sonic.nodes[toe].inverse_bind, bind)) continue;
+                const float bx = bind[3], by = bind[7], bz = bind[11];
+                std::vector<float> y(clip.frames);
+                for (uint32_t f = 0; f < clip.frames; ++f) {
+                    const float *s = clip.frame(f) + toe * 12;
+                    y[f] = s[4] * bx + s[5] * by + s[6] * bz + s[7];
+                }
+                const float lo = *std::min_element(y.begin(), y.end()), hi = *std::max_element(y.begin(), y.end());
+                if (hi - lo < 1e-3f) continue;
+                const float threshold = lo + 0.2f * (hi - lo);
+                const uint32_t loop = clip.frames - 1;
+                for (uint32_t f = 0; f < loop; ++f)
+                    if (y[f] <= threshold && y[(f + loop - 1) % loop] > threshold) data.step_phases[c].push_back(float(f) / loop);
+            }
+        }
+    }
+    if (data.step_phases.size() > size_t(sheets::Anim::run))
+        mod::log("assets: footsteps at walk %zu, run %zu points of the cycle", data.step_phases[size_t(sheets::Anim::walk)].size(),
+                 data.step_phases[size_t(sheets::Anim::run)].size());
+    std::map<std::wstring, std::unique_ptr<frontiers::AcbBank>> banks;   // each bank file is read once
     for (auto &row : sheets::sounds) {
-        frontiers::AcbBank bank;
         frontiers::Pcm pcm;
-        if (!bank.load(root + L"\\image\\x64\\raw\\sound\\" + row.bank, error) || !bank.decode_cue(row.cue, pcm, error)) {
+        auto found = banks.find(row.bank);
+        if (found == banks.end()) {
+            auto bank = std::make_unique<frontiers::AcbBank>();
+            if (!bank->load(root + L"\\image\\x64\\raw\\sound\\" + row.bank, error)) {
+                mod::log("assets: sound bank %ls: %s", row.bank, error.c_str());
+                data.sounds.push_back({});
+                continue;
+            }
+            found = banks.emplace(row.bank, std::move(bank)).first;
+        }
+        if (!found->second->decode_cue(row.cue, pcm, error)) {
             mod::log("assets: sound %s (%s): %s - continuing without it", row.id, row.cue, error.c_str());
             pcm = {};
         } else if (row.maxSeconds > 0) {

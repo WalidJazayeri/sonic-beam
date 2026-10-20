@@ -32,6 +32,8 @@ typedef struct {
   int32_t picked;
   int32_t hudHidden;
   int32_t showSpeed;
+  int32_t surface;
+  int32_t wantsMove;
   int32_t ringCount;
   float rings[768];
 } SonicBeamPacket;
@@ -49,6 +51,7 @@ local runnerLoadedFor = nil
 local cameraActive = false
 local hiddenUnicycle = nil
 local runnerBoost, runnerGrounded, pendingJumps = 0, 0, 0
+local runnerWantsMove, runnerSurface = 0, 0     -- stick pushed, ground under Sonic (footsteps)
 local rings = {}                  -- {pos = vec3, born = seconds}
 local lastSpawn = -100
 local clock = 0
@@ -311,8 +314,8 @@ local function setSonicCamera(on)
 end
 
 -- called by the runner inside the walking body, every graphics frame
-local function onRunner(boost, jumps, grounded)
-  runnerBoost, runnerGrounded = boost, grounded
+local function onRunner(boost, jumps, grounded, wantsMove, surface)
+  runnerBoost, runnerGrounded, runnerWantsMove, runnerSurface = boost, grounded, wantsMove or 0, surface or 0
   pendingJumps = pendingJumps + jumps
 end
 
@@ -415,6 +418,8 @@ sendFrame = function()
   frame.picked = pickedThisFrame
   frame.hudHidden = onFoot and 0 or 1
   frame.showSpeed = settings.showSpeed and 1 or 0
+  frame.surface = runnerSurface
+  frame.wantsMove = runnerWantsMove
   local count = 0
   if onFoot then
     for i, ring in ipairs(rings) do

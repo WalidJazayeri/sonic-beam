@@ -185,6 +185,14 @@
       "purpose": "Frontiers' blue boost aura (SonicAura material recreated)",
       "implementation": "draw_aura",
       "verified": true
+    },
+    {
+      "id": "ground_material",
+      "side": "lua",
+      "target": "playerController.nodeCollision (materialID1 of the ball's contacts), materials from lua/common/particles.json",
+      "purpose": "which ground Sonic runs on, for Frontiers' footstep and landing sounds",
+      "implementation": "surfaceIndex",
+      "verified": true
     }
   ]
 }

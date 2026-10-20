@@ -4,5 +4,5 @@
 
 namespace audio {
 bool init(const assets::Data &data);
-void play(sheets::Sound sound);
+void play(sheets::Sound sound, float pitch = 1.0f);   // pitch: frequency ratio
 }
