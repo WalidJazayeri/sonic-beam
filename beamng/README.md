@@ -25,7 +25,27 @@ You are Sonic. Load any map in Freeroam and you start on foot as the actual Soni
 - Sonic takes over **Freeroam** only. Career, scenarios, missions and tutorials keep BeamNG's normal walking.
 - On the first launch, BeamNG warns about a **"Third-party library"** (`version.dll`, which draws Sonic). Click **Cancel** and it won't ask again.
 
+## Install
+1. Close BeamNG.drive.
+2. Unzip this package anywhere and double-click **`install.bat`**.
+   It finds BeamNG.drive and Sonic Frontiers in your Steam libraries (or asks for their folders), backs up any file it would replace, then installs the mod.
+3. Start BeamNG.drive and load any map in **Freeroam**: you are Sonic.
+
+If Windows refuses to write into the BeamNG folder, right-click `install.bat` and choose **Run as administrator**.
+
+## Uninstall
+Close BeamNG.drive and double-click **`uninstall.bat`** (from the same unzipped folder). It removes every Sonic Beam file and puts back the files the installer had backed up, so BeamNG is exactly as before.
+
+## Manual install (without the script)
+1. Copy `sonicfrontiers_sonic` into `%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\mods\unpacked\`.
+2. Copy the content of `bin64` (`version.dll` and the `SonicBeam` folder) into BeamNG.drive's `Bin64` folder (back up any `version.dll` already there).
+3. Create `%LOCALAPPDATA%\SonicBeam\settings.ini` with one line pointing to your Sonic Frontiers folder, for example:
+   `frontiers=D:/Games/Sonic Frontiers` (the folder that holds `SonicFrontiers.exe` and `image`)
+
+To remove it by hand, delete those three things (and restore your backup).
+
 ## What is in this package
+- `install.bat`, `uninstall.bat`, `setup.ps1`: the installer and uninstaller.
 - `sonicfrontiers_sonic/`: the BeamNG mod (Lua), installed as an unpacked mod in BeamNG's user folder.
 - `bin64/version.dll`: the renderer that draws Sonic and plays his sounds, installed in BeamNG's `Bin64` folder; `bin64/SonicBeam/` holds the licenses.
 

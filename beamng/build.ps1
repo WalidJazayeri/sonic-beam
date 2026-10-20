@@ -61,6 +61,9 @@ Copy-Item (Join-Path $repo 'LICENSE') (Join-Path $binOut 'SonicBeam\LICENSE.txt'
 # The readme sits at the archive root (for Melty) and next to the licenses once installed
 Copy-Item (Join-Path $root 'README.md') (Join-Path $stage 'README.md')
 Copy-Item (Join-Path $root 'README.md') (Join-Path $binOut 'SonicBeam\README.md')
+Set-Content -Encoding ASCII (Join-Path $binOut 'SonicBeam\VERSION') $Version
+# Manual install for players outside Melty: install.bat / uninstall.bat (backs up and restores)
+Get-ChildItem (Join-Path $root 'dist') | Copy-Item -Destination $stage
 $zip = Join-Path $out "SonicBeam-$Version.zip"
 Remove-Item -Force $zip -ErrorAction SilentlyContinue
 & python -I -c "import sys,os,zipfile;r=sys.argv[1];z=zipfile.ZipFile(sys.argv[2],'w',zipfile.ZIP_DEFLATED)

@@ -10,7 +10,7 @@
     "minRate": "slowest playback multiplier",
     "maxRate": "fastest playback multiplier",
     "blendSeconds": "cross-fade time into this clip",
-    "verified": "clip decoded and seen playing in Forza"
+    "verified": "clip decoded and seen playing in BeamNG"
   },
   "rows": [
     {"id": "idle",        "clip": "chr_sonic@idle_loop.anm.pxd",    "loop": true,  "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.25, "verified": false},

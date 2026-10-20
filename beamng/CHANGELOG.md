@@ -5,6 +5,11 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.6.2
+- Installation hors Melty : `install.bat` / `uninstall.bat` (avec `setup.ps1`) dans le paquet. L'installeur trouve BeamNG.drive et Sonic Frontiers dans les bibliothèques Steam (ou demande leurs dossiers), sauvegarde tout fichier qu'il remplacerait, installe le mod et note ce qu'il a fait dans `%LOCALAPPDATA%\SonicBeam\install.json` ; le désinstalleur retire tout et remet les fichiers sauvegardés.
+- Readme du paquet : installation, désinstallation et installation à la main. `Bin64/SonicBeam/VERSION` indique la version installée.
+- Dépôt public GitHub : seulement Sonic Beam (le projet Forza Horizon 5 est retiré), README principal en anglais avec captures.
+
 ## v0.6.1
 - Readme dans le paquet (racine de l'archive et `Bin64/SonicBeam/README.md`) : présentation, commandes, versions des jeux prises en charge (BeamNG.drive 0.40, Sonic Frontiers PC à jour), crédits et licences.
 

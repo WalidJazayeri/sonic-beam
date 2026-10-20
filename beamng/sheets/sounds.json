@@ -7,7 +7,7 @@
     "cue": "cue name inside the bank",
     "volume": "0..1 playback volume",
     "maxSeconds": "longest the sound plays before fading out (0: whole sound, needed for loops)",
-    "verified": "decoded and heard in Forza"
+    "verified": "decoded and heard in BeamNG"
   },
   "rows": [
     {

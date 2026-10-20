@@ -7,7 +7,7 @@
     "entry": "file inside the archive",
     "kind": "model, skeleton, texture",
     "use": "what the mod does with it",
-    "verified": "parsed from the installed game and drawn in Forza"
+    "verified": "parsed from the installed game and drawn in BeamNG"
   },
   "rows": [
     {
