@@ -36,6 +36,8 @@ typedef struct {
   int32_t wantsMove;
   float stepsDb;
   float soundDb;
+  float animSpeed;
+  float animLimit;
   int32_t ringCount;
   float rings[768];
 } SonicBeamPacket;
@@ -83,6 +85,8 @@ local settings = {
   -- Sonic Beam Lab (opened from the O menu)
   stepsDb = 0,          -- footsteps, decibels relative to Frontiers' mix
   soundDb = 0,          -- every sound the mod plays (Sonic and his surroundings)
+  animSpeed = 1,        -- run-cycle cadence multiplier
+  animLimit = 1,        -- run-cycle ceiling multiplier
 }
 local menuOpen = false
 local menuWidgets = nil
@@ -128,6 +132,8 @@ local function openLab()
   labWidgets = {
     stepsDb = im.FloatPtr(settings.stepsDb),
     soundDb = im.FloatPtr(settings.soundDb),
+    animSpeed = im.FloatPtr(settings.animSpeed),
+    animLimit = im.FloatPtr(settings.animLimit),
     open = im.BoolPtr(true),
     place = true,
   }
@@ -138,17 +144,20 @@ local function dbText(db)
   return string.format('%+.1f dB', db)
 end
 
-local function labSlider(label, ptr, key)
+-- one lab setting: slider, its value written beside it, and a button back to the default
+local function labSlider(label, ptr, key, low, high, text, default, defaultLabel)
   im.PushItemWidth(260 * im.uiscale[0])
-  if im.SliderFloat(label, ptr, LAB_MIN_DB, LAB_MAX_DB, '', nil) then
-    settings[key] = clamp(ptr[0], LAB_MIN_DB, LAB_MAX_DB)
+  if im.SliderFloat(label, ptr, low, high, '', nil) then
+    settings[key] = clamp(ptr[0], low, high)
   end
   im.PopItemWidth()
   im.SameLine()
-  im.Text(dbText(settings[key]))
+  im.Text(text(settings[key]))
   im.SameLine()
-  if im.SmallButton('0 dB##' .. key) then ptr[0] = 0; settings[key] = 0 end
+  if im.SmallButton(defaultLabel .. '##' .. key) then ptr[0] = default; settings[key] = default end
 end
+
+local function timesText(x) return string.format('x%.2f', x) end
 
 local function drawLab()
   if not labOpen or not im then return end
@@ -162,8 +171,13 @@ local function drawLab()
   im.Begin('Sonic Beam Lab', w.open, im.WindowFlags_NoCollapse)
   im.Text('Sound')
   im.Separator()
-  labSlider('Footsteps', w.stepsDb, 'stepsDb')
-  labSlider('All Sonic sounds', w.soundDb, 'soundDb')
+  labSlider('Footsteps', w.stepsDb, 'stepsDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
+  labSlider('All Sonic sounds', w.soundDb, 'soundDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
+  im.Spacing()
+  im.Text('Animation')
+  im.Separator()
+  labSlider('Animation speed', w.animSpeed, 'animSpeed', 0.5, 3, timesText, 1, 'x1')
+  labSlider('Animation speed limit', w.animLimit, 'animLimit', 0.5, 3, timesText, 1, 'x1')
   im.Separator()
   if im.Button('Close') then w.open[0] = false end
   im.End()
@@ -496,6 +510,8 @@ sendFrame = function()
   frame.surface = runnerSurface
   frame.stepsDb = settings.stepsDb
   frame.soundDb = settings.soundDb
+  frame.animSpeed = settings.animSpeed
+  frame.animLimit = settings.animLimit
   frame.wantsMove = runnerWantsMove
   local count = 0
   if onFoot then

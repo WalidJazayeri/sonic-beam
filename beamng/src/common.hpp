@@ -36,6 +36,7 @@ extern "C" struct SbFrame {
     int32_t surface;                   // ground under Sonic: 0 concrete, 1 dirt, 2 grass, 3 sand, 4 snow, 5 water, 6 metal
     int32_t wantsMove;                 // the stick / WASD is pushed
     float stepsDb, soundDb;            // Sonic Beam Lab: footsteps and all sounds, decibels (-40 mutes)
+    float animSpeed, animLimit;        // Sonic Beam Lab: run-cycle speed and ceiling multipliers
     int32_t ringCount;                 // world rings to draw
     const float *ringPos;              // ringCount * xyz
 };

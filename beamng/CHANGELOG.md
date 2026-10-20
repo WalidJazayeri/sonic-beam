@@ -5,6 +5,10 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.3.2
+- Animations plus rapides, collées à la vitesse : course 1× à 32 km/h, plafond 3,2× (avant 2,1×) ; boost 1× à 60 km/h, plafond 4,5× (avant 2,6×) ; marche plafond 2×. Le plafond reste doux (pas de membres qui s'affolent).
+- Labo : section « Animation » avec « Animation speed » (multiplie la cadence, ×0,5 à ×3) et « Animation speed limit » (multiplie le plafond, ×0,5 à ×3), valeur affichée et bouton ×1.
+
 ## v0.3.1
 - **Labo de paramètres** (« Sonic Beam Lab ») : bouton « Lab » dans le menu O. Premiers réglages, en décibels avec la valeur affichée à côté et un bouton « 0 dB » :
   - volume des bruits de pas ;

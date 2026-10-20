@@ -277,12 +277,15 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     const AnimationRow &arow = animations[s.player.anim];
     // Like Frontiers: the run cycle speeds up with Sonic, then eases into its fastest rate so
     // his limbs never flail at absurd speeds; the rate itself changes smoothly.
+    // Sonic Beam Lab: animation speed (multiplies the cadence) and limit (multiplies the ceiling)
     float want_rate = 1.0f;
     if (arow.speedRate) {
-        const float raw = s.speed_kmh / std::max(1.0f, arow.refKmh);
-        const float knee = arow.minRate + (arow.maxRate - arow.minRate) * 0.7f;
-        want_rate = raw <= knee ? raw : knee + (arow.maxRate - knee) * (1 - std::exp(-(raw - knee) / std::max(0.01f, arow.maxRate - knee)));
-        want_rate = std::max(arow.minRate, std::min(arow.maxRate, want_rate));
+        const float speed_mul = f->animSpeed > 0 ? f->animSpeed : 1.0f, limit_mul = f->animLimit > 0 ? f->animLimit : 1.0f;
+        const float top = std::max(arow.minRate, arow.maxRate * limit_mul);
+        const float raw = s.speed_kmh / std::max(1.0f, arow.refKmh) * speed_mul;
+        const float knee = arow.minRate + (top - arow.minRate) * 0.7f;
+        want_rate = raw <= knee ? raw : knee + (top - knee) * (1 - std::exp(-(raw - knee) / std::max(0.01f, top - knee)));
+        want_rate = std::max(arow.minRate, std::min(top, want_rate));
     }
     s.player.rate += (want_rate - s.player.rate) * std::min(1.0f, float(dt) * 8);
     s.player.time += dt * s.player.rate;
