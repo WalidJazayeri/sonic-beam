@@ -58,6 +58,7 @@ local testMode = false
 local autopilotSent = nil
 local settingsSent = nil
 local camPose = {fresh = false}   -- set by the sonicfrontiersChase camera for this frame
+local notAllowedFor = 0            -- seconds the game state has not been plain free roam
 local sonicBodyId = nil           -- walking body Sonic currently drives
 local safeSpots = {}              -- recent spots where Sonic stood upright, for the Unstuck button
 local unstuck                     -- defined below, called from the menu
@@ -325,7 +326,15 @@ local function onPreRender(dtReal, dtSim)
   clock = clock + (dtReal or 0)
   readStatus()
   local allowed = sonicAllowed()
-  if allowed then ensureOnFoot() elseif getPlayerVehicle(0) then onFootDone = true end   -- never pull the player out of a car later
+  -- BeamNG settles its game state a moment after the map appears: only give up putting the player
+  -- on foot once a non-free-roam state has held for 3 s (then never pull them out of a car later)
+  if allowed then
+    notAllowedFor = 0
+    ensureOnFoot()
+  elseif getPlayerVehicle(0) then
+    notAllowedFor = notAllowedFor + (dtReal or 0)
+    if notAllowedFor > 3 then onFootDone = true end
+  end
   local unicycle = getUnicycle()
   if unicycle and not allowed then
     if sonicBodyId == unicycle:getId() then
@@ -421,6 +430,7 @@ end
 
 local function onClientStartMission()
   onFootDone, runnerLoadedFor, hiddenUnicycle, sonicBodyId = false, nil, nil, nil
+  notAllowedFor = 0
   safeSpots = {}
   rings = {}
   cameraActive = false

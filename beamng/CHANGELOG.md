@@ -5,6 +5,10 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.2.3
+- Correctif : en chargeant une carte depuis le menu, Sonic restait dans la voiture (BeamNG annonce le mode Libre un peu après l'apparition de la carte). Le mod attend maintenant 3 s avant de renoncer à mettre le joueur à pied.
+- Raccourci de test : options de lancement Steam sans guillemets (le lanceur de BeamNG plante avec).
+
 ## v0.2.2
 - Anneaux mis de côté pour l'instant : plus d'anneaux au sol, de récompenses ni de compteur d'anneaux. Le compteur de vitesse prend sa place en haut à gauche. Tout le code reste là, derrière l'interrupteur `ringsEnabled` (sheets/tuning.json, 0 → 1 pour les remettre).
 - Test Melty : la vérification « ring-collected » est retirée tant que les anneaux sont coupés.
