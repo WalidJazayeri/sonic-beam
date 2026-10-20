@@ -38,6 +38,9 @@ typedef struct {
   float soundDb;
   float animSpeed;
   float animLimit;
+  float windDb;
+  float barrierBoomKmh;
+  float boostBoomKmh;
   int32_t ringCount;
   float rings[768];
 } SonicBeamPacket;
@@ -87,6 +90,9 @@ local settings = {
   soundDb = 0,          -- every sound the mod plays (Sonic and his surroundings)
   animSpeed = 1,        -- run-cycle cadence multiplier
   animLimit = 1,        -- run-cycle ceiling multiplier
+  windDb = 0,           -- Frontiers' speed wind
+  barrierBoom = true, barrierBoomKmh = 1235,   -- sonic boom when breaking this speed (sound barrier)
+  boostBoom = true, boostBoomKmh = 200,        -- sonic boom on a boost started at least this fast
 }
 local menuOpen = false
 local menuWidgets = nil
@@ -134,6 +140,11 @@ local function openLab()
     soundDb = im.FloatPtr(settings.soundDb),
     animSpeed = im.FloatPtr(settings.animSpeed),
     animLimit = im.FloatPtr(settings.animLimit),
+    windDb = im.FloatPtr(settings.windDb),
+    barrierBoom = im.BoolPtr(settings.barrierBoom),
+    barrierBoomKmh = im.FloatPtr(settings.barrierBoomKmh),
+    boostBoom = im.BoolPtr(settings.boostBoom),
+    boostBoomKmh = im.FloatPtr(settings.boostBoomKmh),
     open = im.BoolPtr(true),
     place = true,
   }
@@ -158,6 +169,15 @@ local function labSlider(label, ptr, key, low, high, text, default, defaultLabel
 end
 
 local function timesText(x) return string.format('x%.2f', x) end
+local function kmhText(x) return string.format('%.0f km/h', x) end
+
+-- a switch with the speed it works at (slider disabled while off)
+local function labBoom(label, onPtr, onKey, kmhPtr, kmhKey, low, high, default)
+  if im.Checkbox(label .. '##' .. onKey, onPtr) then settings[onKey] = onPtr[0] end
+  if not onPtr[0] then im.BeginDisabled(true) end
+  labSlider('  at speed##' .. kmhKey, kmhPtr, kmhKey, low, high, kmhText, default, string.format('%d', default))
+  if not onPtr[0] then im.EndDisabled() end
+end
 
 local function drawLab()
   if not labOpen or not im then return end
@@ -165,7 +185,8 @@ local function drawLab()
   if w.place then
     w.place = false
     local view = im.GetMainViewport()
-    im.SetNextWindowPos(im.ImVec2(view.Pos.x + view.Size.x / 2, view.Pos.y + view.Size.y * 0.24), im.Cond_Always, im.ImVec2(0.5, 0))
+    -- left side, below the speedometer: Sonic (centre) is drawn over BeamNG's UI
+    im.SetNextWindowPos(im.ImVec2(view.Pos.x + view.Size.x * 0.02, view.Pos.y + view.Size.y * 0.24), im.Cond_Always, im.ImVec2(0, 0))
     im.SetNextWindowSize(im.ImVec2(600 * im.uiscale[0], 0), im.Cond_Always)
   end
   im.Begin('Sonic Beam Lab', w.open, im.WindowFlags_NoCollapse)
@@ -173,6 +194,9 @@ local function drawLab()
   im.Separator()
   labSlider('Footsteps', w.stepsDb, 'stepsDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
   labSlider('All Sonic sounds', w.soundDb, 'soundDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
+  labSlider('Wind', w.windDb, 'windDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
+  labBoom('Sonic boom at the sound barrier', w.barrierBoom, 'barrierBoom', w.barrierBoomKmh, 'barrierBoomKmh', 300, 2000, 1235)
+  labBoom('Sonic boom on a fast boost', w.boostBoom, 'boostBoom', w.boostBoomKmh, 'boostBoomKmh', 50, 1000, 200)
   im.Spacing()
   im.Text('Animation')
   im.Separator()
@@ -512,6 +536,9 @@ sendFrame = function()
   frame.soundDb = settings.soundDb
   frame.animSpeed = settings.animSpeed
   frame.animLimit = settings.animLimit
+  frame.windDb = settings.windDb
+  frame.barrierBoomKmh = settings.barrierBoom and settings.barrierBoomKmh or 0
+  frame.boostBoomKmh = settings.boostBoom and settings.boostBoomKmh or 0
   frame.wantsMove = runnerWantsMove
   local count = 0
   if onFoot then

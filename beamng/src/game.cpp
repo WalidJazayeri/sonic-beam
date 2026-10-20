@@ -97,6 +97,8 @@ struct State {
     bool was_boosting = false;
     float blur = 0, aura = 0;
     int step_anim = -1;
+    float wind = 0;
+    bool past_barrier = false;
     double step_phase = 0;
     bool wanted_move = false;
     double burst_at = -100;
@@ -246,6 +248,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     if (boosting && !s.was_boosting) {
         pay(RingRule::boost, ringRules[int(RingRule::boost)].rings, now, origin);
         s.burst_at = now; s.burst_pos = origin;
+        if (f->boostBoomKmh > 0 && s.speed_kmh >= f->boostBoomKmh) audio::play(Sound::sonic_boom);   // boom on a fast boost
     }
     s.was_boosting = boosting;
     if (boosting && s.speed_kmh > 100) testmode::report_boosting();
@@ -346,6 +349,22 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         const bool wants = f->wantsMove != 0;
         if (s.wanted_move && !wants && !s.air && f->onFoot && s.speed_kmh > 50) audio::play(Sound::brake);
         s.wanted_move = wants;
+    }
+
+    // ---------------- Frontiers speed wind (sn_relative_wind): louder and higher with speed, pushed
+    // by the boost; sonic boom when he breaks the chosen speed (sound barrier by default)
+    {
+        float want = 0;
+        if (f->onFoot) {
+            want = std::max(0.0f, std::min(1.0f, (s.speed_kmh - tuning::windStartKmh) / std::max(1.0f, tuning::windFullKmh - tuning::windStartKmh)));
+            if (f->boost && s.speed_kmh > 30) want = std::max(want, tuning::windBoost);
+        }
+        s.wind += (want - s.wind) * std::min(1.0f, float(dt) * 3);
+        audio::loop(Sound::wind, s.wind * s.wind, 0.8f + 0.6f * s.wind, f->windDb);
+        if (f->barrierBoomKmh > 0 && f->onFoot) {
+            if (!s.past_barrier && s.speed_kmh >= f->barrierBoomKmh) { s.past_barrier = true; audio::play(Sound::sonic_boom); }
+            else if (s.past_barrier && s.speed_kmh < f->barrierBoomKmh * 0.9f) s.past_barrier = false;
+        }
     }
 
     // ---------------- Frontiers boost effect: speed blur, aura, flash when a boost starts

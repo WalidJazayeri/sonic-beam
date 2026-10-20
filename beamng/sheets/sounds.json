@@ -6,7 +6,7 @@
     "bank": "ACB file under image/x64/raw/sound",
     "cue": "cue name inside the bank",
     "volume": "0..1 playback volume",
-    "maxSeconds": "longest the sound plays before fading out",
+    "maxSeconds": "longest the sound plays before fading out (0: whole sound, needed for loops)",
     "verified": "decoded and heard in Forza"
   },
   "rows": [
@@ -224,6 +224,22 @@
       "cue": "sn_brake",
       "volume": 0.55,
       "maxSeconds": 1.5,
+      "verified": false
+    },
+    {
+      "id": "wind",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_relative_wind",
+      "volume": 0.7,
+      "maxSeconds": 0,
+      "verified": false
+    },
+    {
+      "id": "sonic_boom",
+      "bank": "sonic_sound/se_rangers_player_sonic.acb",
+      "cue": "sn_sonic_boom",
+      "volume": 0.9,
+      "maxSeconds": 0,
       "verified": false
     }
   ]

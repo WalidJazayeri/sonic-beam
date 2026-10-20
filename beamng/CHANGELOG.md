@@ -5,6 +5,12 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.3.3
+- Vent de vitesse de Sonic Frontiers (`sn_relative_wind`) : en boucle, de 80 à 600 km/h, plus fort et plus aigu avec la vitesse, au moins aux 3/5 pendant le boost.
+- Bang supersonique (`sn_sonic_boom`) : au mur du son (1 235 km/h, réarmé sous 90 %) et au lancement d'un boost à 200 km/h ou plus.
+- Labo : « Wind » (dB) ; « Sonic boom at the sound barrier » et « Sonic boom on a fast boost », chacun avec on/off et sa vitesse.
+- Le labo s'ouvre à gauche de l'écran (il passait sous Sonic).
+
 ## v0.3.2
 - Animations plus rapides, collées à la vitesse : course 1× à 32 km/h, plafond 3,2× (avant 2,1×) ; boost 1× à 60 km/h, plafond 4,5× (avant 2,6×) ; marche plafond 2×. Le plafond reste doux (pas de membres qui s'affolent).
 - Labo : section « Animation » avec « Animation speed » (multiplie la cadence, ×0,5 à ×3) et « Animation speed limit » (multiplie le plafond, ×0,5 à ×3), valeur affichée et bouton ×1.

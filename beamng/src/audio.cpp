@@ -5,6 +5,7 @@
 #include "common.hpp"
 #include "testmode.hpp"
 #include <xaudio2.h>
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <vector>
@@ -14,7 +15,7 @@ namespace audio {
 namespace {
 IXAudio2 *engine = nullptr;
 IXAudio2MasteringVoice *master = nullptr;
-struct Voice { IXAudio2SourceVoice *voice = nullptr; uint32_t rate = 0, channels = 0; };
+struct Voice { IXAudio2SourceVoice *voice = nullptr; uint32_t rate = 0, channels = 0; bool looping = false; };
 std::vector<Voice> voices;
 const assets::Data *source = nullptr;
 bool started = false;
@@ -67,6 +68,40 @@ void play(sheets::Sound sound, float pitch)
     buffer.pAudioData = reinterpret_cast<const BYTE *>(pcm.samples.data());
     buffer.Flags = XAUDIO2_END_OF_STREAM;
     if (SUCCEEDED(v.voice->SubmitSourceBuffer(&buffer)) && SUCCEEDED(v.voice->Start())) testmode::report_sound_played();
+}
+
+void loop(sheets::Sound sound, float level, float pitch, float extra_db)
+{
+    if (!engine || !source) return;
+    const size_t i = size_t(sound);
+    if (i >= source->sounds.size() || source->sounds[i].samples.empty()) return;
+    Voice &v = voices[i];
+    if (level <= 0.001f) {
+        if (v.voice && v.looping) { v.voice->Stop(); v.voice->FlushSourceBuffers(); v.looping = false; }
+        return;
+    }
+    const frontiers::Pcm &pcm = source->sounds[i];
+    if (!v.voice) {
+        WAVEFORMATEX format{};
+        format.wFormatTag = WAVE_FORMAT_PCM;
+        format.nChannels = WORD(pcm.channels);
+        format.nSamplesPerSec = pcm.rate;
+        format.wBitsPerSample = 16;
+        format.nBlockAlign = WORD(2 * pcm.channels);
+        format.nAvgBytesPerSec = pcm.rate * format.nBlockAlign;
+        if (FAILED(engine->CreateSourceVoice(&v.voice, &format, 0, 4.0f))) { v.voice = nullptr; return; }
+    }
+    if (!v.looping) {
+        XAUDIO2_BUFFER buffer{};
+        buffer.AudioBytes = UINT32(pcm.samples.size() * sizeof(int16_t));
+        buffer.pAudioData = reinterpret_cast<const BYTE *>(pcm.samples.data());
+        buffer.Flags = XAUDIO2_END_OF_STREAM;
+        buffer.LoopCount = XAUDIO2_LOOP_INFINITE;
+        if (FAILED(v.voice->SubmitSourceBuffer(&buffer)) || FAILED(v.voice->Start())) return;
+        v.looping = true;
+    }
+    v.voice->SetVolume(sheets::sounds[i].volume * level * gain(extra_db));
+    v.voice->SetFrequencyRatio(std::max(0.25f, std::min(4.0f, pitch)));
 }
 
 void set_levels(float sound_db, float steps_db)

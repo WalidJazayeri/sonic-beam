@@ -44,6 +44,9 @@ M.camera = {
   wallMargin = 0.3,
 }
 M.tuning = {
+  windStartKmh = 80,
+  windFullKmh = 600,
+  windBoost = 0.6,
   ringsEnabled = 0,
   blurStartKmh = 150,
   blurFullKmh = 600,

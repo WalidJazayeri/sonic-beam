@@ -9,6 +9,9 @@
     "verified": "checked in BeamNG"
   },
   "rows": [
+    {"id": "windStartKmh",      "value": 80,   "unit": "km/h",  "purpose": "speed where Frontiers' relative-wind sound starts",                 "verified": false},
+    {"id": "windFullKmh",       "value": 600,  "unit": "km/h",  "purpose": "speed where the wind is at full volume and highest pitch",          "verified": false},
+    {"id": "windBoost",         "value": 0.6,  "unit": "x",     "purpose": "least wind while boosting (on top of the speed share)",             "verified": false},
     {"id": "ringsEnabled",      "value": 0,    "unit": "0/1",   "purpose": "Frontiers rings on the ground, ring rewards and the ring counter (off for now, to come back later)", "verified": false},
     {"id": "blurStartKmh",      "value": 150,  "unit": "km/h",  "purpose": "speed where the boost blur starts",                                 "verified": false},
     {"id": "blurFullKmh",       "value": 600,  "unit": "km/h",  "purpose": "speed where the boost blur is at its strongest",                     "verified": false},
