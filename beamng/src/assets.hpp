@@ -19,6 +19,9 @@ struct Data {
     bool boost_fx = false;
     frontiers::Model aura;                  // aura shell on Sonic's own skeleton
     frontiers::Texture aura_texture, glow_texture, wave_texture;
+    // Power Boost trail and lightning (optional too)
+    bool trail_fx = false;
+    frontiers::Texture trail_texture, bolt_texture, arc_texture, orb_texture;
     // when each foot touches the ground in each clip, as a share of the loop (footstep sounds)
     std::vector<std::vector<float>> step_phases;   // indexed by sheets::Anim
 };

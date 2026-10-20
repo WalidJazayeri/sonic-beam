@@ -43,6 +43,7 @@ extern "C" struct SbFrame {
     float groundPos[3], groundNormal[3]; // ground under Sonic and its slope
     float shadowOpacity;               // Sonic Beam Lab: 0..1
     int32_t hasGround;                 // groundPos/groundNormal are valid
+    float trailLength, trailIntensity, lightning;   // Sonic Beam Lab: boost trail multipliers
     int32_t ringCount;                 // world rings to draw
     const float *ringPos;              // ringCount * xyz
 };

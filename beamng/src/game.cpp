@@ -98,6 +98,14 @@ struct State {
     float blur = 0, aura = 0;
     int step_anim = -1;
     float wind = 0;
+    struct TrailPoint { V3 pos; double born; };
+    std::vector<TrailPoint> trail;
+    float trail_on = 0;
+    struct Bolt { V3 pos, vel; double born; float life, size, spin; int kind, cell; };
+    std::vector<Bolt> bolts;
+    double bolt_debt = 0, arc_reroll = 0;
+    int arc_column = 0;
+    std::vector<V3> arc_jitter;
     double step_phase = 0;
     bool wanted_move = false;
     double burst_at = -100;
@@ -146,6 +154,9 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     scene.rings.clear();
     scene.texts.clear();
     scene.sprites.clear();
+    scene.trail.clear();
+    scene.beam.clear();
+    scene.arcs.clear();
     scene.blur = 0;
     scene.aura = 0;
     const double dt = s.last_frame ? std::min(0.1, now - s.last_frame) : 0.016;
@@ -249,6 +260,16 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         pay(RingRule::boost, ringRules[int(RingRule::boost)].rings, now, origin);
         s.burst_at = now; s.burst_pos = origin;
         if (f->boostBoomKmh > 0 && s.speed_kmh >= f->boostBoomKmh) audio::play(Sound::sonic_boom);   // boom on a fast boost
+        // Power Boost start: a crackle of bolts and glowing orbs drifting away (Frontiers' pow_boost_impact)
+        const float amount = f->lightning > 0 ? f->lightning : 0;
+        for (int i = 0; i < int(10 * amount); ++i) {
+            const float a = rnd() * 2 * kPi, r = 0.2f + 0.6f * rnd();
+            s.bolts.push_back({origin + V3{std::cos(a) * r, std::sin(a) * r, (rnd() - 0.3f) * 0.9f}, {}, now + 0.03 * i, 0.14f, 0.7f + 0.6f * rnd(), rnd() * 6.28f, 2, int(rnd() * 16) & 15});
+        }
+        for (int i = 0; i < 9; ++i) {
+            const float a = rnd() * 2 * kPi;
+            s.bolts.push_back({origin, {std::cos(a) * (1.2f + rnd()), std::sin(a) * (1.2f + rnd()), 0.4f + rnd() * 1.4f}, now, 0.9f, 0.35f + 0.25f * rnd(), 0, 3, 0});
+        }
     }
     s.was_boosting = boosting;
     if (boosting && s.speed_kmh > 100) testmode::report_boosting();
@@ -389,6 +410,80 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         }
         s.wind += (want - s.wind) * std::min(1.0f, float(dt) * 3);
         audio::loop(Sound::wind, s.wind * s.wind, 0.8f + 0.6f * s.wind, f->windDb);
+    }
+
+    // ---------------- Power Boost trail (Frontiers' locus streaks) with lightning arcs along it and
+    // bolts crackling around Sonic, while boosting; it recedes behind him when the boost ends
+    {
+        const float trail_len = f->trailLength > 0 ? f->trailLength : 1, intensity = std::max(0.0f, f->trailIntensity), lightning = std::max(0.0f, f->lightning);
+        const bool active = f->onFoot && f->boost && s.speed_kmh > 40;
+        s.trail_on += ((active ? 1.0f : 0.0f) - s.trail_on) * std::min(1.0f, float(dt) * (active ? 10 : 3));
+        const V3 chest = feet + V3{0, 0, 0.55f};
+        const double keep = tuning::trailSeconds * trail_len;
+        if (!f->onFoot) s.trail.clear();
+        if (active && (s.trail.empty() || length(chest - s.trail.back().pos) > 0.25f)) s.trail.push_back({chest, now});
+        if (!s.trail.empty() && length(chest - s.trail.back().pos) > 60) s.trail.clear();   // teleport
+        s.trail.erase(std::remove_if(s.trail.begin(), s.trail.end(), [&](const State::TrailPoint &p) { return now - p.born > keep; }), s.trail.end());
+        // the ribbon runs from Sonic's chest back along the points, facing the camera
+        std::vector<State::TrailPoint> path;
+        if (active) path.push_back({chest, now});
+        for (auto it = s.trail.rbegin(); it != s.trail.rend(); ++it) path.push_back(*it);
+        if (now >= s.arc_reroll) {   // lightning arcs re-strike a few times a second
+            s.arc_reroll = now + 0.07;
+            s.arc_column = int(rnd() * 4) & 3;
+            s.arc_jitter.resize(64);
+            for (auto &j : s.arc_jitter) j = {(rnd() - 0.5f) * 0.3f, (rnd() - 0.5f) * 0.3f, (rnd() - 0.5f) * 0.3f};
+        }
+        auto ribbon = [&](std::vector<float> &out, float width, float alpha, float u0, float u1, bool jitter, float v_scale, float v_speed, V3 color) {
+            float along = 0;
+            V3 prev_l{}, prev_r{}; float prev_v = 0, prev_a = 0; bool have = false;
+            for (size_t i = 0; i < path.size(); ++i) {
+                V3 p = path[i].pos;
+                if (jitter && i > 0) p = p + s.arc_jitter[i % s.arc_jitter.size()];
+                const V3 dir = i + 1 < path.size() ? path[i].pos - path[i + 1].pos : (i > 0 ? path[i - 1].pos - path[i].pos : fwd);
+                if (i > 0) along += length(path[i - 1].pos - path[i].pos);
+                const float age = float((now - path[i].born) / std::max(0.05, keep));
+                const float fade = std::pow(std::max(0.0f, 1 - age), 1.5f) * alpha * s.trail_on;
+                V3 side = cross(norm(dir), norm(p - cam));
+                side = norm(side) * (width * (0.15f + 0.85f * std::max(0.0f, 1 - age)) * 0.5f);
+                const V3 l = p - side, r = p + side;
+                const float v = along / v_scale - float(now) * v_speed;
+                if (have) {
+                    const float q[6][9] = {
+                        {prev_l.x, prev_l.y, prev_l.z, u0, prev_v, color.x, color.y, color.z, prev_a}, {prev_r.x, prev_r.y, prev_r.z, u1, prev_v, color.x, color.y, color.z, prev_a},
+                        {r.x, r.y, r.z, u1, v, color.x, color.y, color.z, fade},
+                        {prev_l.x, prev_l.y, prev_l.z, u0, prev_v, color.x, color.y, color.z, prev_a}, {r.x, r.y, r.z, u1, v, color.x, color.y, color.z, fade},
+                        {l.x, l.y, l.z, u0, v, color.x, color.y, color.z, fade}};
+                    for (auto &vert : q) out.insert(out.end(), vert, vert + 9);
+                }
+                prev_l = l; prev_r = r; prev_v = v; prev_a = fade; have = true;
+            }
+        };
+        if (s.trail_on > 0.01f && path.size() >= 2 && intensity > 0) {
+            // electric-blue beam underneath (alpha blended, so it stays blue on bright ground),
+            // Frontiers' locus streaks over it, and lightning arcs along it (both additive)
+            ribbon(scene.beam, tuning::trailWidth * 1.3f, 0.75f * std::min(1.0f, intensity), 0, 1, false, 1.0f, 0, V3{0.08f, 0.38f, 1.0f});
+            ribbon(scene.trail, tuning::trailWidth, intensity, 0, 1, false, 3.0f, 2.5f, V3{0.3f, 0.65f, 1.0f});
+            if (lightning > 0) ribbon(scene.arcs, tuning::trailWidth * 0.6f, 0.9f * std::min(1.5f, lightning), s.arc_column / 4.0f, (s.arc_column + 1) / 4.0f, true, 2.0f, 0, V3{0.5f, 0.8f, 1.0f});
+        }
+        // bolts crackling on and around Sonic and along the trail
+        if (active && lightning > 0) {
+            s.bolt_debt += dt * tuning::boltsPerSecond * lightning;
+            while (s.bolt_debt >= 1) {
+                s.bolt_debt -= 1;
+                const V3 at = (!s.trail.empty() && rnd() < 0.4f) ? s.trail[size_t(rnd() * s.trail.size()) % s.trail.size()].pos : chest;
+                s.bolts.push_back({at + V3{(rnd() - 0.5f) * 0.8f, (rnd() - 0.5f) * 0.8f, (rnd() - 0.5f) * 0.9f}, {}, now, 0.08f + 0.07f * rnd(), 0.45f + 0.5f * rnd(), rnd() * 6.28f, 2, int(rnd() * 16) & 15});
+            }
+        } else s.bolt_debt = 0;
+        s.bolts.erase(std::remove_if(s.bolts.begin(), s.bolts.end(), [&](const State::Bolt &b) { return now - b.born > b.life || !f->onFoot; }), s.bolts.end());
+        for (auto &b : s.bolts) {
+            const float age = float(now - b.born);
+            if (age < 0) continue;
+            const float k = age / b.life;
+            Sprite sp{{b.pos.x + b.vel.x * age, b.pos.y + b.vel.y * age, b.pos.z + b.vel.z * age}, b.size, b.kind == 3 ? (1 - k) * (1 - k) : (1 - k), b.spin, b.kind};
+            if (b.kind == 2) { const int c = b.cell & 15; sp.uv[0] = (c % 4) / 4.0f; sp.uv[1] = (c / 4) / 4.0f; sp.uv[2] = sp.uv[0] + 0.25f; sp.uv[3] = sp.uv[1] + 0.25f; }
+            scene.sprites.push_back(sp);
+        }
     }
 
     // ---------------- Frontiers boost effect: speed blur, aura, flash when a boost starts

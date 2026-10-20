@@ -5,6 +5,15 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.5.0
+- Traînée du boost façon Power Boost de Frontiers :
+  - un faisceau bleu électrique qui suit le vrai chemin de Sonic (virages, sauts), large contre lui et effilé vers l'arrière, qui recule et s'éteint quand le boost s'arrête ;
+  - les traits lumineux de la traînée de Sonic (`ef_y01_so_locus01`) qui défilent dessus ;
+  - des arcs électriques le long de la traînée (`ef_n01_com_lightning04`, qui se redessinent ~14 fois par seconde) et des éclairs qui crépitent autour de Sonic (planche de 16 éclairs `ef_i01_com_lightning02_anim`).
+- Au lancement du boost : une salve d'éclairs et des boules lumineuses bleues qui s'envolent (`ef_n01_com_glowlight13`), comme le `pow_boost_impact` de Frontiers.
+- Labo : section « Boost trail » avec « Trail length », « Trail intensity » et « Lightning » (0 coupe les éclairs).
+- Outil de développement `ddsview` : décode une texture BC6H/BC7 de Frontiers en image pour la regarder.
+
 ## v0.4.2
 - Labo : les valeurs affichées gardent leur symbole % (« Shadow opacity 55 % » au lieu de « 55 ») ; l'affichage n'interprète plus le texte comme un format.
 

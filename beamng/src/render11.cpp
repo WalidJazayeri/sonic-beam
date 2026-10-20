@@ -70,6 +70,7 @@ struct Renderer {
     GpuMesh sonic, ring, aura;
     bool has_aura = false;
     int aura_texture = -1, glow_texture = -1, wave_texture = -1;
+    int trail_texture = -1, bolt_texture = -1, arc_texture = -1, orb_texture = -1;
     ID3D11Texture2D *copy = nullptr;               // copy of BeamNG's frame for the speed blur
     ID3D11ShaderResourceView *copy_srv = nullptr;
     UINT copy_w = 0, copy_h = 0;
@@ -237,6 +238,16 @@ bool upload_assets(const assets::Data &d)
         r.textures.push_back(texture_view(d.wave_texture));
         r.has_aura = r.textures[base] && r.textures[base + 1] && r.textures[base + 2];
         if (r.has_aura) { r.aura_texture = base; r.glow_texture = base + 1; r.wave_texture = base + 2; }
+    }
+    if (d.trail_fx) {
+        const int base = int(r.textures.size());
+        r.textures.push_back(texture_view(d.trail_texture));
+        r.textures.push_back(texture_view(d.bolt_texture));
+        r.textures.push_back(texture_view(d.arc_texture));
+        r.textures.push_back(texture_view(d.orb_texture));
+        if (r.textures[base] && r.textures[base + 1] && r.textures[base + 2] && r.textures[base + 3]) {
+            r.trail_texture = base; r.bolt_texture = base + 1; r.arc_texture = base + 2; r.orb_texture = base + 3;
+        }
     }
     static uint8_t atlas[font::atlas_w * font::atlas_h];
     font::build_atlas(atlas);
@@ -524,6 +535,15 @@ void draw_frame(IDXGISwapChain *chain)
             }
             draw_flat(v, scene.view, scene.proj, 1, r.white_texture);
         }
+        // Power Boost trail behind Sonic (drawn before him, so he stays in front of it)
+        if (r.trail_texture >= 0 && (!scene.trail.empty() || !scene.arcs.empty())) {
+            const float factor[4] = {};
+            if (!scene.beam.empty()) draw_flat(draw::as_vertices(scene.beam), scene.view, scene.proj, 5, r.white_texture);
+            r.context->OMSetBlendState(r.blend_add, factor, 0xffffffff);
+            if (!scene.trail.empty()) draw_flat(draw::as_vertices(scene.trail), scene.view, scene.proj, 4, r.trail_texture);
+            if (!scene.arcs.empty()) draw_flat(draw::as_vertices(scene.arcs), scene.view, scene.proj, 4, r.arc_texture);
+            r.context->OMSetBlendState(r.blend, factor, 0xffffffff);
+        }
         if (scene.sonic_visible && !scene.pose.empty()) {
             bind_bones(scene.pose.data(), scene.pose.size());
             if (scene.sonic_shadow) {
@@ -564,6 +584,10 @@ void draw_frame(IDXGISwapChain *chain)
         r.context->OMSetBlendState(r.blend_add, factor, 0xffffffff);
         draw_flat(draw::sprite_vertices(scene, 0), scene.view, scene.proj, 2, r.glow_texture);
         draw_flat(draw::sprite_vertices(scene, 1), scene.view, scene.proj, 3, r.wave_texture);
+        if (r.trail_texture >= 0) {
+            draw_flat(draw::sprite_vertices(scene, 2), scene.view, scene.proj, 4, r.bolt_texture);
+            draw_flat(draw::sprite_vertices(scene, 3), scene.view, scene.proj, 4, r.orb_texture);
+        }
         r.context->OMSetBlendState(r.blend, factor, 0xffffffff);
     }
     if (!scene.texts.empty()) {

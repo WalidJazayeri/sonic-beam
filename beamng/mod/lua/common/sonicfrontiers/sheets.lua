@@ -44,6 +44,9 @@ M.camera = {
   wallMargin = 0.3,
 }
 M.tuning = {
+  trailSeconds = 0.45,
+  trailWidth = 0.55,
+  boltsPerSecond = 14,
   shadowSunMin = 0.12,
   shadowFadeMeters = 3.0,
   shadowLift = 0.03,

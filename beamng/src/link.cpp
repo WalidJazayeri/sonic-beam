@@ -30,6 +30,7 @@ struct Packet {
     float stepsDb, soundDb, animSpeed, animLimit, windDb, boostBoomKmh;
     float toSun[3], groundPos[3], groundNormal[3], shadowOpacity;
     int32_t hasGround;
+    float trailLength, trailIntensity, lightning;
     int32_t ringCount;
     // followed by ringCount * 3 floats
 };
@@ -69,7 +70,8 @@ DWORD WINAPI listener(void *)
         f.onFoot = p.onFoot; f.grounded = p.grounded; f.boost = p.boost; f.jumped = p.jumped; f.picked = p.picked;
         f.hudHidden = p.hudHidden; f.showSpeed = p.showSpeed; f.surface = p.surface; f.wantsMove = p.wantsMove; f.stepsDb = p.stepsDb; f.soundDb = p.soundDb; f.animSpeed = p.animSpeed; f.animLimit = p.animLimit; f.windDb = p.windDb; f.boostBoomKmh = p.boostBoomKmh;
         std::memcpy(f.toSun, p.toSun, 12); std::memcpy(f.groundPos, p.groundPos, 12); std::memcpy(f.groundNormal, p.groundNormal, 12);
-        f.shadowOpacity = p.shadowOpacity; f.hasGround = p.hasGround; f.ringCount = count; f.ringPos = rings.data();
+        f.shadowOpacity = p.shadowOpacity; f.hasGround = p.hasGround;
+        f.trailLength = p.trailLength; f.trailIntensity = p.trailIntensity; f.lightning = p.lightning; f.ringCount = count; f.ringPos = rings.data();
         sb_frame(&f);
         if (first) { first = false; mod::log("link: first frame from the Sonic Beam script"); hook_graphics(); }
         const Status reply{kStatusMagic, testmode::active() ? 1 : 0, game::ring_total()};

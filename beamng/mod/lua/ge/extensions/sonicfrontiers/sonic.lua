@@ -45,6 +45,9 @@ typedef struct {
   float groundNormal[3];
   float shadowOpacity;
   int32_t hasGround;
+  float trailLength;
+  float trailIntensity;
+  float lightning;
   int32_t ringCount;
   float rings[768];
 } SonicBeamPacket;
@@ -97,6 +100,7 @@ local settings = {
   windDb = 0,           -- Frontiers' speed wind
   boostBoom = true, boostBoomKmh = 200,        -- sonic boom on a boost started at least this fast
   shadowOpacity = 0.55, -- Sonic's shadow
+  trailLength = 1, trailIntensity = 1, lightning = 1,   -- Power Boost trail and lightning
 }
 local menuOpen = false
 local menuWidgets = nil
@@ -148,6 +152,9 @@ local function openLab()
     boostBoom = im.BoolPtr(settings.boostBoom),
     boostBoomKmh = im.FloatPtr(settings.boostBoomKmh),
     shadowOpacity = im.FloatPtr(settings.shadowOpacity),
+    trailLength = im.FloatPtr(settings.trailLength),
+    trailIntensity = im.FloatPtr(settings.trailIntensity),
+    lightning = im.FloatPtr(settings.lightning),
     open = im.BoolPtr(true),
     place = true,
   }
@@ -203,6 +210,12 @@ local function drawLab()
   im.Text('Shadow')
   im.Separator()
   labSlider('Shadow opacity', w.shadowOpacity, 'shadowOpacity', 0, 1, function(x) return string.format('%d %%', math.floor(x * 100 + 0.5)) end, 0.55, '55 %')
+  im.Spacing()
+  im.Text('Boost trail')
+  im.Separator()
+  labSlider('Trail length', w.trailLength, 'trailLength', 0.25, 3, timesText, 1, 'x1')
+  labSlider('Trail intensity', w.trailIntensity, 'trailIntensity', 0, 2, timesText, 1, 'x1')
+  labSlider('Lightning', w.lightning, 'lightning', 0, 2, timesText, 1, 'x1')
   im.Spacing()
   im.Text('Animation')
   im.Separator()
@@ -582,6 +595,9 @@ sendFrame = function()
   readSun()
   frame.toSun[0], frame.toSun[1], frame.toSun[2] = toSun.x, toSun.y, toSun.z
   frame.shadowOpacity = settings.shadowOpacity
+  frame.trailLength = settings.trailLength
+  frame.trailIntensity = settings.trailIntensity
+  frame.lightning = settings.lightning
   if groundPos then
     frame.hasGround = 1
     frame.groundPos[0], frame.groundPos[1], frame.groundPos[2] = groundPos.x, groundPos.y, groundPos.z

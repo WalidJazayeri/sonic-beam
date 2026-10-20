@@ -49,6 +49,15 @@ struct FOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; float4 c : COLOR;
 FOut vsFlat(FIn i) { FOut o; o.pos = mul(mul(float4(i.p, 1), modelView), proj); o.uv = i.uv; o.c = i.c; return o; }
 float4 psFlat(FOut i) : SV_Target {
     float a;
+    if (params.x > 4.5) {                       // boost beam: soft across the ribbon (u), alpha blended
+        float across = 1 - abs(i.uv.x * 2 - 1);
+        return float4(output(i.c.rgb), i.c.a * pow(saturate(across), 1.5));
+    }
+    if (params.x > 3.5) {                       // Frontiers effect texture lit by its colour (trail, bolts, orbs), additive
+        float3 t = saturate(tex.Sample(wrapS, i.uv).rgb);
+        float a = max(t.r, max(t.g, t.b));
+        return float4(output(i.c.rgb * (0.6 + 0.8 * t)), saturate(i.c.a * a * 1.5));
+    }
     if (params.x > 1.5) {                       // boost flash (2) / shock wave (3), drawn additive
         float r = length(i.uv * 2 - 1);
         float shape = params.x > 2.5 ? pow(saturate(1 - abs(r - 0.72) / 0.2), 2) : pow(saturate(1 - r), 2.5);
@@ -149,11 +158,21 @@ inline std::vector<FlatVertex> sprite_vertices(const game::Scene &scene, int kin
         for (int k = 0; k < 4; ++k) {
             const float x = corner[k][0] * c - corner[k][1] * sn, y = corner[k][0] * sn + corner[k][1] * c;
             for (int a = 0; a < 3; ++a) q[k].p[a] = s.pos[a] + right[a] * x + up[a] * y;
-            q[k].uv[0] = corner[k][0] * 0.5f + 0.5f; q[k].uv[1] = 0.5f - corner[k][1] * 0.5f;
+            q[k].uv[0] = s.uv[0] + (corner[k][0] * 0.5f + 0.5f) * (s.uv[2] - s.uv[0]);
+            q[k].uv[1] = s.uv[1] + (0.5f - corner[k][1] * 0.5f) * (s.uv[3] - s.uv[1]);
             std::memcpy(q[k].c, color, sizeof(color));
         }
         for (int k : {0, 1, 2, 0, 2, 3}) v.push_back(q[k]);
     }
+    return v;
+}
+
+// the trail's floats (9 per vertex) are laid out exactly like FlatVertex
+static_assert(sizeof(FlatVertex) == 9 * sizeof(float), "trail vertex layout");
+inline std::vector<FlatVertex> as_vertices(const std::vector<float> &f)
+{
+    std::vector<FlatVertex> v(f.size() / 9);
+    if (!v.empty()) std::memcpy(v.data(), f.data(), v.size() * sizeof(FlatVertex));
     return v;
 }
 

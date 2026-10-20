@@ -74,6 +74,7 @@ struct Context {
     GpuMesh sonic, ring, aura_mesh;
     bool has_aura = false;
     int aura_texture = -1, glow_texture = -1, wave_texture = -1;
+    int trail_texture = -1, bolt_texture = -1, arc_texture = -1, orb_texture = -1;
     int copy_slot = -1;                           // descriptor of the frame copy the speed blur reads
     ID3D12Resource *copy = nullptr;
     UINT copy_w = 0, copy_h = 0;
@@ -286,6 +287,12 @@ bool upload_assets(const assets::Data &d)
         c.aura_texture = int(sources.size()); sources.push_back({&d.aura_texture, nullptr, 0, 0, 0, 0});
         c.glow_texture = int(sources.size()); sources.push_back({&d.glow_texture, nullptr, 0, 0, 0, 0});
         c.wave_texture = int(sources.size()); sources.push_back({&d.wave_texture, nullptr, 0, 0, 0, 0});
+    }
+    if (d.trail_fx) {
+        c.trail_texture = int(sources.size()); sources.push_back({&d.trail_texture, nullptr, 0, 0, 0, 0});
+        c.bolt_texture = int(sources.size()); sources.push_back({&d.bolt_texture, nullptr, 0, 0, 0, 0});
+        c.arc_texture = int(sources.size()); sources.push_back({&d.arc_texture, nullptr, 0, 0, 0, 0});
+        c.orb_texture = int(sources.size()); sources.push_back({&d.orb_texture, nullptr, 0, 0, 0, 0});
     }
     c.copy_slot = int(sources.size());            // filled by ensure_copy
     D3D12_DESCRIPTOR_HEAP_DESC hd{D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, UINT(sources.size() + 1), D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0};
@@ -586,6 +593,10 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
                 for (auto &m : c.sonic.meshes) c.list->DrawIndexedInstanced(m.index_count, 1, m.first_index, INT(m.base_vertex), 0);
             }
         }
+        // Power Boost trail behind Sonic (drawn before him, so he stays in front of it)
+        if (!scene.beam.empty()) draw_flat(f, draw::as_vertices(scene.beam), scene.view, scene.proj, 5, c.white_texture);
+        if (!scene.trail.empty()) draw_flat(f, draw::as_vertices(scene.trail), scene.view, scene.proj, 4, c.trail_texture, c.glow);
+        if (!scene.arcs.empty()) draw_flat(f, draw::as_vertices(scene.arcs), scene.view, scene.proj, 4, c.arc_texture, c.glow);
         if (b) {
             draw_mesh(f, c.sonic, b, scene.sonic_model, scene.view, scene.proj, 1, 0);
             drew_sonic = true;
@@ -604,6 +615,8 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
     if (scene.camera && !scene.sprites.empty()) {
         draw_flat(f, draw::sprite_vertices(scene, 0), scene.view, scene.proj, 2, c.glow_texture, c.glow);
         draw_flat(f, draw::sprite_vertices(scene, 1), scene.view, scene.proj, 3, c.wave_texture, c.glow);
+        draw_flat(f, draw::sprite_vertices(scene, 2), scene.view, scene.proj, 4, c.bolt_texture, c.glow);
+        draw_flat(f, draw::sprite_vertices(scene, 3), scene.view, scene.proj, 4, c.orb_texture, c.glow);
     }
     if (!scene.texts.empty()) draw_flat(f, draw::text_vertices(scene, aspect), draw::kIdentity, draw::kIdentity, 0, c.font_texture);
     barrier(target, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);

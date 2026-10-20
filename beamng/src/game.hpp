@@ -27,7 +27,8 @@ struct Sprite {
     float size;                    // metres, full width
     float alpha;
     float spin;                    // radians
-    int kind;                      // 0 glow flash, 1 shock wave
+    int kind;                      // 0 glow flash, 1 shock wave, 2 lightning bolt, 3 glowing orb
+    float uv[4] = {0, 0, 1, 1};    // texture rectangle (a cell of the bolt sheet)
 };
 
 struct Scene {
@@ -50,6 +51,8 @@ struct Scene {
     float aura = 0;                // 0..1 aura brightness (drawn on Sonic's pose)
     float aura_time = 0;           // seconds, scrolls the aura pattern
     std::vector<Sprite> sprites;
+    // Power Boost trail: world-space triangles, 9 floats per vertex (position, uv, rgba)
+    std::vector<float> trail, arcs, beam;
 };
 
 // frame: latest data from Lua (null before the first one). aspect: back buffer width / height.

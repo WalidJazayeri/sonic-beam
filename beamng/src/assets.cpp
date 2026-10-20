@@ -65,6 +65,11 @@ bool load_all()
                   texture(effect_pac, sheets::boost_glow_texture, data.glow_texture) &&
                   texture(effect_pac, sheets::boost_wave_texture, data.wave_texture);
         data.boost_fx = ok;
+        data.trail_fx = ok && texture(sonic_pac, sheets::trail_texture, data.trail_texture) &&
+                        texture(effect_pac, sheets::bolt_texture, data.bolt_texture) &&
+                        texture(effect_pac, sheets::arc_texture, data.arc_texture) &&
+                        texture(effect_pac, sheets::orb_texture, data.orb_texture);
+        if (!data.trail_fx) mod::log("assets: boost trail unavailable (%s) - continuing without it", error.c_str());
         if (ok) mod::log("assets: boost aura %zu vertices, effect textures %ux%u", data.aura.vertices.size(), data.aura_texture.width, data.aura_texture.height);
         else mod::log("assets: boost effect unavailable (%s) - continuing without it", error.c_str());
     }

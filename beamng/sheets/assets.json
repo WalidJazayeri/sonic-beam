@@ -65,6 +65,38 @@
       "kind": "texture",
       "use": "shock wave when a boost starts (Frontiers' boost_impact wave)",
       "verified": false
+    },
+    {
+      "id": "trail_texture",
+      "archive": "image/x64/raw/character/sonic.pac",
+      "entry": "ef_y01_so_locus01.dds",
+      "kind": "texture",
+      "use": "boost trail: Sonic's own locus streaks",
+      "verified": false
+    },
+    {
+      "id": "bolt_texture",
+      "archive": "image/x64/raw/EffectCommon.pac",
+      "entry": "ef_i01_com_lightning02_anim.dds",
+      "kind": "texture",
+      "use": "boost lightning: 4x4 sheet of bolts (Power Boost)",
+      "verified": false
+    },
+    {
+      "id": "arc_texture",
+      "archive": "image/x64/raw/EffectCommon.pac",
+      "entry": "ef_n01_com_lightning04.dds",
+      "kind": "texture",
+      "use": "lightning arcs along the boost trail (4 columns)",
+      "verified": false
+    },
+    {
+      "id": "orb_texture",
+      "archive": "image/x64/raw/EffectCommon.pac",
+      "entry": "ef_n01_com_glowlight13.dds",
+      "kind": "texture",
+      "use": "glowing orbs when a boost starts (Power Boost)",
+      "verified": false
     }
   ]
 }

@@ -9,6 +9,9 @@
     "verified": "checked in BeamNG"
   },
   "rows": [
+    {"id": "trailSeconds",      "value": 0.45, "unit": "s",     "purpose": "how long the boost trail lingers behind Sonic (x the lab's Trail length)", "verified": false},
+    {"id": "trailWidth",        "value": 0.55, "unit": "m",     "purpose": "boost trail width next to Sonic (it tapers toward the tail)",       "verified": false},
+    {"id": "boltsPerSecond",    "value": 14,   "unit": "1/s",   "purpose": "lightning bolts crackling around a boosting Sonic (x the lab's Lightning)", "verified": false},
     {"id": "shadowSunMin",      "value": 0.12, "unit": "x",     "purpose": "sun height (sine of its elevation) below which the projected shadow gives way to the soft one", "verified": false},
     {"id": "shadowFadeMeters",  "value": 3.0,  "unit": "m",     "purpose": "height above the ground at which Sonic's shadow has faded out",     "verified": false},
     {"id": "shadowLift",        "value": 0.03, "unit": "m",     "purpose": "shadow drawn this far above the ground",                            "verified": false},
