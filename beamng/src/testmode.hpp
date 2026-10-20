@@ -15,6 +15,5 @@ void report_assets_loaded();
 void report_frames_drawn();
 void report_running();
 void report_boosting();
-void report_ring_collected();
 void report_sound_played();
 }

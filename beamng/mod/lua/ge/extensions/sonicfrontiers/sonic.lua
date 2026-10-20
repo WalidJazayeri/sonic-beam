@@ -361,8 +361,10 @@ local function onPreRender(dtReal, dtSim)
     end
     groundedByRay = updateBody(unicycle)
     rememberSafeSpot(unicycle, groundedByRay or runnerGrounded == 1)
-    spawnRings(bodyFeet, bodyVel)
-    updateRings(bodyFeet)
+    if sheets.tuning.ringsEnabled == 1 then   -- rings are switched off for now (beamng/sheets/tuning.json)
+      spawnRings(bodyFeet, bodyVel)
+      updateRings(bodyFeet)
+    end
   else
     hiddenUnicycle = nil
     bodyVel = vec3()

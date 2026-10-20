@@ -5,6 +5,10 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.2.2
+- Anneaux mis de côté pour l'instant : plus d'anneaux au sol, de récompenses ni de compteur d'anneaux. Le compteur de vitesse prend sa place en haut à gauche. Tout le code reste là, derrière l'interrupteur `ringsEnabled` (sheets/tuning.json, 0 → 1 pour les remettre).
+- Test Melty : la vérification « ring-collected » est retirée tant que les anneaux sont coupés.
+
 ## v0.2.1
 - Raccourci de test `Lancer-SonicBeam-test.bat` : lance BeamNG sans arguments, donc sans l'avertissement de Steam (le dossier de test se règle une fois dans les options de lancement Steam).
 

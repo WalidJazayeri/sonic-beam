@@ -9,6 +9,7 @@
     "verified": "checked in BeamNG"
   },
   "rows": [
+    {"id": "ringsEnabled",      "value": 0,    "unit": "0/1",   "purpose": "Frontiers rings on the ground, ring rewards and the ring counter (off for now, to come back later)", "verified": false},
     {"id": "blurStartKmh",      "value": 150,  "unit": "km/h",  "purpose": "speed where the boost blur starts",                                 "verified": false},
     {"id": "blurFullKmh",       "value": 600,  "unit": "km/h",  "purpose": "speed where the boost blur is at its strongest",                     "verified": false},
     {"id": "blurStrength",      "value": 0.22, "unit": "x",     "purpose": "longest streak, as a share of the distance to the screen centre",    "verified": false},

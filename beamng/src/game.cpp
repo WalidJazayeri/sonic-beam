@@ -106,6 +106,7 @@ struct State {
 
 void pay(RingRule rule, int amount, double now, V3 origin)
 {
+    if (!tuning::ringsEnabled) return;   // rings are switched off for now (sheets/tuning.json)
     const RingRuleRow &row = ringRules[int(rule)];
     if (now - s.last_pay[int(rule)] < row.cooldownSeconds || amount <= 0) return;
     s.last_pay[int(rule)] = now;
@@ -241,7 +242,6 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     for (int i = 0; i < f->picked; ++i) {
         s.last_pay[int(RingRule::pickup)] = -100;
         pay(RingRule::pickup, ringRules[int(RingRule::pickup)].rings, now, origin);
-        testmode::report_ring_collected();
     }
     if ((s.state == int(sheets::State::run) || boosting) && s.speed_kmh > 25) {
         s.run_time += dt;
@@ -363,23 +363,27 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
 
     // ---------------- HUD (Frontiers-style ring counter with the real ring as its icon)
     if (!f->hudHidden) {
-        const float icon = 0.055f / 0.296f;
-        Instance hud;
-        hud.screen = true;
-        copy(mul(mul(scale3(icon / std::max(0.5f, aspect), icon, 0.05f), rot_y(spin)), basis({1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {-0.90f, 0.82f, 0.5f})), hud.model);
-        scene.rings.push_back(hud);
-        char count[32];
-        std::snprintf(count, sizeof(count), "%03d", s.rings);
-        add_text(scene, -0.84f, 0.855f, 0.07f, 0, 0, 0, 0.6f, count);
-        add_text(scene, -0.845f, 0.86f, 0.07f, 1.0f, 0.86f, 0.15f, 1, count);
+        const bool rings_on = tuning::ringsEnabled != 0;
+        if (rings_on) {
+            const float icon = 0.055f / 0.296f;
+            Instance hud;
+            hud.screen = true;
+            copy(mul(mul(scale3(icon / std::max(0.5f, aspect), icon, 0.05f), rot_y(spin)), basis({1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {-0.90f, 0.82f, 0.5f})), hud.model);
+            scene.rings.push_back(hud);
+            char count[32];
+            std::snprintf(count, sizeof(count), "%03d", s.rings);
+            add_text(scene, -0.84f, 0.855f, 0.07f, 0, 0, 0, 0.6f, count);
+            add_text(scene, -0.845f, 0.86f, 0.07f, 1.0f, 0.86f, 0.15f, 1, count);
+        }
         if (f->showSpeed) {
-            // Speedometer under the ring counter (Sonic's real speed, km/h)
+            // Speedometer: under the ring counter, or in its place while rings are off
             char speed_text[32];
             std::snprintf(speed_text, sizeof(speed_text), "%.0f KM/H", std::min(s.shown_kmh, 99999999.0f));
-            add_text(scene, -0.935f, 0.705f, 0.045f, 0, 0, 0, 0.6f, speed_text);
-            add_text(scene, -0.94f, 0.71f, 0.045f, 0.55f, 0.85f, 1.0f, 1, speed_text);
+            const float y = rings_on ? 0.71f : 0.86f, size = rings_on ? 0.045f : 0.06f;
+            add_text(scene, -0.935f, y - 0.005f, size, 0, 0, 0, 0.6f, speed_text);
+            add_text(scene, -0.94f, y, size, 0.55f, 0.85f, 1.0f, 1, speed_text);
         }
-        if (now - s.plus_time < 1.2) {
+        if (rings_on && now - s.plus_time < 1.2) {
             char plus[32];
             std::snprintf(plus, sizeof(plus), "+%d", s.plus);
             add_text(scene, -0.70f, 0.86f, 0.05f, 1, 1, 1, float(1 - (now - s.plus_time) / 1.2), plus);
@@ -387,7 +391,8 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         if (s.first_shown >= 0 && now - s.first_shown < 25) {
             const float a = float(std::min(1.0, (25 - (now - s.first_shown)) / 2));
             add_text(scene, -0.62f, 0.70f, 0.036f, 1, 1, 1, a, "SONIC BEAM - YOU ARE SONIC: WASD RUN, SHIFT BOOST (NO LIMIT), SPACE JUMP");
-            add_text(scene, -0.62f, 0.64f, 0.030f, 0.85f, 0.9f, 1, a, "MOUSE: CAMERA   F: CAR IN/OUT   O: SPEED MENU   RUN THROUGH THE RINGS");
+            add_text(scene, -0.62f, 0.64f, 0.030f, 0.85f, 0.9f, 1, a, rings_on ? "MOUSE: CAMERA   F: CAR IN/OUT   O: SPEED MENU   RUN THROUGH THE RINGS"
+                                                                              : "MOUSE: CAMERA   F: CAR IN/OUT   O: SPEED MENU");
         }
     }
     static double next_state = 0;

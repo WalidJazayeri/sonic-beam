@@ -150,7 +150,6 @@ void report_assets_loaded() { report(sheets::Test::frontiers_sonic_loaded); }
 void report_frames_drawn() { report(sheets::Test::sonic_drawn_in_beamng); }
 void report_running() { report(sheets::Test::sonic_runs); }
 void report_boosting() { report(sheets::Test::sonic_boosts); }
-void report_ring_collected() { report(sheets::Test::ring_collected); }
 void report_sound_played() { report(sheets::Test::frontiers_sound_played); }
 
 } // namespace testmode

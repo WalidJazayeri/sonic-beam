@@ -43,6 +43,25 @@ M.camera = {
   mouseSpeed = 7,
   wallMargin = 0.3,
 }
+M.tuning = {
+  ringsEnabled = 0,
+  blurStartKmh = 150,
+  blurFullKmh = 600,
+  blurStrength = 0.22,
+  blurWithoutBoost = 0.5,
+  auraFadeIn = 0.12,
+  auraFadeOut = 0.35,
+  auraOpacity = 0.9,
+  burstSeconds = 0.45,
+  burstMeters = 2.6,
+  sonicHeightMeters = 1.0,
+  speedSmoothing = 0.12,
+  turnRateDegrees = 70,
+  facingRate = 12,
+  leanDegrees = 16,
+  nearClip = 0.05,
+  soundVolume = 0.8,
+}
 M.rings = {
   pickup = {trigger = "pickup", everySeconds = 0, rings = 1, cooldownSeconds = 0, popup = 0},
   drift = {trigger = "drift", everySeconds = 1.0, rings = 5, cooldownSeconds = 0, popup = 5},
