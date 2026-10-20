@@ -5,6 +5,14 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.3.1
+- **Labo de paramètres** (« Sonic Beam Lab ») : bouton « Lab » dans le menu O. Premiers réglages, en décibels avec la valeur affichée à côté et un bouton « 0 dB » :
+  - volume des bruits de pas ;
+  - volume général de tous les sons du mod (Sonic et son environnement).
+  De −40 dB (coupé) à +12 dB, enregistrés à la fermeture du labo, appliqués en direct.
+- Sonic et le HUD se cachent quand un écran de BeamNG est ouvert (menu pause, menu principal…), au lieu d'être dessinés par-dessus.
+- Menu O et labo placés plus bas, sous le texte d'aide du démarrage.
+
 ## v0.3.0
 - Bruits de pas de Sonic Frontiers (banque `se_rangers_player_sonic.acb` du joueur) :
   - pas de marche (`sn_walk_…`) et de course (`sn_run_…`), calés sur ses pieds : les contacts sont calculés dans les animations (orteils `Toe_L`/`Toe_R`, 2 par cycle) ; hauteur légèrement variée à chaque pas ;

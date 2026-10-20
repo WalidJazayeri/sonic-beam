@@ -26,7 +26,9 @@ struct Packet {
     float camPos[3], camFwd[3], camUp[3];
     float fovY, dt;
     float feet[3], vel[3];
-    int32_t onFoot, grounded, boost, jumped, picked, hudHidden, showSpeed, surface, wantsMove, ringCount;
+    int32_t onFoot, grounded, boost, jumped, picked, hudHidden, showSpeed, surface, wantsMove;
+    float stepsDb, soundDb;
+    int32_t ringCount;
     // followed by ringCount * 3 floats
 };
 struct Status { uint32_t magic; int32_t testActive, rings; };
@@ -63,7 +65,7 @@ DWORD WINAPI listener(void *)
         f.fovY = p.fovY; f.dt = p.dt;
         std::memcpy(f.feet, p.feet, 12); std::memcpy(f.vel, p.vel, 12);
         f.onFoot = p.onFoot; f.grounded = p.grounded; f.boost = p.boost; f.jumped = p.jumped; f.picked = p.picked;
-        f.hudHidden = p.hudHidden; f.showSpeed = p.showSpeed; f.surface = p.surface; f.wantsMove = p.wantsMove; f.ringCount = count; f.ringPos = rings.data();
+        f.hudHidden = p.hudHidden; f.showSpeed = p.showSpeed; f.surface = p.surface; f.wantsMove = p.wantsMove; f.stepsDb = p.stepsDb; f.soundDb = p.soundDb; f.ringCount = count; f.ringPos = rings.data();
         sb_frame(&f);
         if (first) { first = false; mod::log("link: first frame from the Sonic Beam script"); hook_graphics(); }
         const Status reply{kStatusMagic, testmode::active() ? 1 : 0, game::ring_total()};

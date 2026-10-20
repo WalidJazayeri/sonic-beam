@@ -226,6 +226,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     }
     const V3 feet = v3(f->feet);
     const int surface = std::max(0, std::min(6, int(f->surface)));
+    audio::set_levels(f->soundDb, f->stepsDb);
     const V3 origin = feet + V3{0, 0, 0.6f};
 
     // ---------------- events and rewards (sheets/events.json, rings.json)

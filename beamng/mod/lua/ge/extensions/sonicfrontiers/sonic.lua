@@ -34,6 +34,8 @@ typedef struct {
   int32_t showSpeed;
   int32_t surface;
   int32_t wantsMove;
+  float stepsDb;
+  float soundDb;
   int32_t ringCount;
   float rings[768];
 } SonicBeamPacket;
@@ -78,6 +80,9 @@ local settings = {
   speedCapKmh = sheets.physics.speedCapKmh,
   boostRampKmhPerSecond = sheets.physics.boostRampKmhPerSecond,
   showSpeed = true,
+  -- Sonic Beam Lab (opened from the O menu)
+  stepsDb = 0,          -- footsteps, decibels relative to Frontiers' mix
+  soundDb = 0,          -- every sound the mod plays (Sonic and his surroundings)
 }
 local menuOpen = false
 local menuWidgets = nil
@@ -113,15 +118,67 @@ local function toggleMenu()
   end
 end
 
+-- Sonic Beam Lab: settings we tune together, opened from the O menu. Sliders in decibels;
+-- the lowest value mutes. Saved when the lab closes.
+local LAB_MIN_DB, LAB_MAX_DB = -40, 12
+local labOpen, labWidgets = false, nil
+
+local function openLab()
+  labOpen = true
+  labWidgets = {
+    stepsDb = im.FloatPtr(settings.stepsDb),
+    soundDb = im.FloatPtr(settings.soundDb),
+    open = im.BoolPtr(true),
+    place = true,
+  }
+end
+
+local function dbText(db)
+  if db <= LAB_MIN_DB then return 'muted' end
+  return string.format('%+.1f dB', db)
+end
+
+local function labSlider(label, ptr, key)
+  im.PushItemWidth(260 * im.uiscale[0])
+  if im.SliderFloat(label, ptr, LAB_MIN_DB, LAB_MAX_DB, '', nil) then
+    settings[key] = clamp(ptr[0], LAB_MIN_DB, LAB_MAX_DB)
+  end
+  im.PopItemWidth()
+  im.SameLine()
+  im.Text(dbText(settings[key]))
+  im.SameLine()
+  if im.SmallButton('0 dB##' .. key) then ptr[0] = 0; settings[key] = 0 end
+end
+
+local function drawLab()
+  if not labOpen or not im then return end
+  local w = labWidgets
+  if w.place then
+    w.place = false
+    local view = im.GetMainViewport()
+    im.SetNextWindowPos(im.ImVec2(view.Pos.x + view.Size.x / 2, view.Pos.y + view.Size.y * 0.24), im.Cond_Always, im.ImVec2(0.5, 0))
+    im.SetNextWindowSize(im.ImVec2(600 * im.uiscale[0], 0), im.Cond_Always)
+  end
+  im.Begin('Sonic Beam Lab', w.open, im.WindowFlags_NoCollapse)
+  im.Text('Sound')
+  im.Separator()
+  labSlider('Footsteps', w.stepsDb, 'stepsDb')
+  labSlider('All Sonic sounds', w.soundDb, 'soundDb')
+  im.Separator()
+  if im.Button('Close') then w.open[0] = false end
+  im.End()
+  if not w.open[0] then labOpen = false; saveSettings() end
+end
+
 local function drawMenu()
   if not menuOpen or not im then return end
   local w = menuWidgets
-  -- top centre: clear of the ring counter and speedometer (top left) and of Sonic (centre), who is drawn over BeamNG's UI
+  -- upper centre: clear of the speedometer (top left), the start-up hint (top) and Sonic (centre), who are drawn over BeamNG's UI
   local view = im.GetMainViewport()
   if w.place then
     -- forced once per opening: BeamNG remembers window positions between sessions
     w.place = false
-    im.SetNextWindowPos(im.ImVec2(view.Pos.x + view.Size.x / 2, view.Pos.y + view.Size.y * 0.08), im.Cond_Always, im.ImVec2(0.5, 0))
+    im.SetNextWindowPos(im.ImVec2(view.Pos.x + view.Size.x / 2, view.Pos.y + view.Size.y * 0.24), im.Cond_Always, im.ImVec2(0.5, 0))
     im.SetNextWindowSize(im.ImVec2(560 * im.uiscale[0], 0), im.Cond_Always)
   end
   im.Begin('Sonic Beam', w.open, im.WindowFlags_NoCollapse)
@@ -142,6 +199,7 @@ local function drawMenu()
   if im.Checkbox('Show speed', w.showSpeed) then settings.showSpeed = w.showSpeed[0] end
   im.Separator()
   if im.Button('Unstuck: back to the last safe spot') then w.open[0] = false; unstuck() end
+  if im.Button('Lab: settings we tune together') then w.open[0] = false; openLab() end
   if im.Button('Close (O)') then w.open[0] = false end
   im.End()
   if not w.open[0] then toggleMenu() end
@@ -390,10 +448,27 @@ end
 -- Sends this frame to the renderer. Runs in onDrawDebug, which BeamNG calls after every
 -- onPreRender (core_camera's included) and right before rendering, so the camera we send is the
 -- one this frame is drawn with; reading it in onPreRender could give last frame's camera.
+-- BeamNG's own screens (pause menu, main menu, garage...) are drawn by its UI, under the mod's
+-- overlay: while one is open, Sonic and the HUD are hidden. The gameplay route is "play".
+local menuCheckAt, beamngMenu = -1, false
+local function beamngMenuOpen()
+  if clock - menuCheckAt < 0.2 then return beamngMenu end
+  menuCheckAt = clock
+  local router, menus = extensions.ui_router, extensions.ui_menuManager
+  beamngMenu = false
+  if router and router.getCurrent and menus and menus.getGameplayRoute then
+    local current = router.getCurrent()
+    local name = type(current) == 'table' and (current.name or (current.request and current.request.name)) or nil
+    local play = menus.getGameplayRoute()
+    beamngMenu = name ~= nil and play ~= nil and name ~= play
+  end
+  return beamngMenu
+end
+
 sendFrame = function()
   if not frameReady or not udp then return end
   frameReady = false
-  local onFoot = frameOnFoot
+  local onFoot = frameOnFoot and not beamngMenuOpen()
   local pos, fwd, up, fov, feet
   if cameraActive and camPose.fresh then
     pos, fwd, up, fov, feet = camPose.pos, camPose.fwd, camPose.up, camPose.fov, camPose.feet
@@ -419,6 +494,8 @@ sendFrame = function()
   frame.hudHidden = onFoot and 0 or 1
   frame.showSpeed = settings.showSpeed and 1 or 0
   frame.surface = runnerSurface
+  frame.stepsDb = settings.stepsDb
+  frame.soundDb = settings.soundDb
   frame.wantsMove = runnerWantsMove
   local count = 0
   if onFoot then
@@ -452,6 +529,7 @@ end
 
 local function onUpdate()
   drawMenu()
+  drawLab()
 end
 
 local function onExtensionLoaded()
@@ -467,6 +545,7 @@ M.onUpdate = onUpdate
 M.onDrawDebug = onDrawDebug
 M.toggleMenu = toggleMenu
 M.unstuck = unstuck
+M.openLab = openLab
 M.isMenuOpen = function() return menuOpen end
 M.onClientStartMission = onClientStartMission
 M.onClientEndMission = onClientEndMission
