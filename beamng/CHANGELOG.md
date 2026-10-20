@@ -5,6 +5,9 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.6.1
+- Readme dans le paquet (racine de l'archive et `Bin64/SonicBeam/README.md`) : présentation, commandes, versions des jeux prises en charge (BeamNG.drive 0.40, Sonic Frontiers PC à jour), crédits et licences.
+
 ## v0.6.0
 - Les effets du boost suivent la vitesse de Sonic : longueur et intensité de la traînée, éclairs (et ceux du lancement) et aura bleue montent avec la vitesse, jusqu'à 100 % des réglages à la vitesse de référence (la vitesse max du menu O, ou 500 km/h si la limite est coupée).
 - Labo, onglet Boost : case « Effects follow Sonic's speed » et curseur « Speed influence » (0 = aucun effet de la vitesse, 0,75 par défaut = les effets partent de 25 %, 1 = partent de 0), avec la vitesse de référence affichée.

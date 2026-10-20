@@ -58,6 +58,9 @@ New-Item -ItemType Directory -Force (Join-Path $binOut 'SonicBeam\licenses') | O
 Copy-Item $dll (Join-Path $binOut 'version.dll')
 Get-ChildItem (Join-Path $repo 'licenses') | Where-Object Name -notmatch 'Streamline' | Copy-Item -Destination (Join-Path $binOut 'SonicBeam\licenses')
 Copy-Item (Join-Path $repo 'LICENSE') (Join-Path $binOut 'SonicBeam\LICENSE.txt')
+# The readme sits at the archive root (for Melty) and next to the licenses once installed
+Copy-Item (Join-Path $root 'README.md') (Join-Path $stage 'README.md')
+Copy-Item (Join-Path $root 'README.md') (Join-Path $binOut 'SonicBeam\README.md')
 $zip = Join-Path $out "SonicBeam-$Version.zip"
 Remove-Item -Force $zip -ErrorAction SilentlyContinue
 & python -I -c "import sys,os,zipfile;r=sys.argv[1];z=zipfile.ZipFile(sys.argv[2],'w',zipfile.ZIP_DEFLATED)
