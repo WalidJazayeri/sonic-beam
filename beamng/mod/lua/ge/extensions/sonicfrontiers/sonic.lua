@@ -166,7 +166,7 @@ local function labSlider(label, ptr, key, low, high, text, default, defaultLabel
   end
   im.PopItemWidth()
   im.SameLine()
-  im.Text(text(settings[key]))
+  im.TextUnformatted(text(settings[key]))   -- not im.Text: it reads % as a format code
   im.SameLine()
   if im.SmallButton(defaultLabel .. '##' .. key) then ptr[0] = default; settings[key] = default end
 end

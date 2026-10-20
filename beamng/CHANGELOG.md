@@ -5,6 +5,9 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.4.2
+- Labo : les valeurs affichées gardent leur symbole % (« Shadow opacity 55 % » au lieu de « 55 ») ; l'affichage n'interprète plus le texte comme un format.
+
 ## v0.4.1
 - Labo : le bouton « Close » devient « Close and save » (il enregistrait déjà, c'est maintenant explicite).
 - Bang au mur du son supprimé (réglage, ligne du labo et déclenchement). Le bang au lancement d'un boost rapide reste.
