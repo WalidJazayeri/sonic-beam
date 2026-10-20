@@ -98,7 +98,6 @@ struct State {
     float blur = 0, aura = 0;
     int step_anim = -1;
     float wind = 0;
-    bool past_barrier = false;
     double step_phase = 0;
     bool wanted_move = false;
     double burst_at = -100;
@@ -381,7 +380,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     }
 
     // ---------------- Frontiers speed wind (sn_relative_wind): louder and higher with speed, pushed
-    // by the boost; sonic boom when he breaks the chosen speed (sound barrier by default)
+    // by the boost
     {
         float want = 0;
         if (f->onFoot) {
@@ -390,10 +389,6 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         }
         s.wind += (want - s.wind) * std::min(1.0f, float(dt) * 3);
         audio::loop(Sound::wind, s.wind * s.wind, 0.8f + 0.6f * s.wind, f->windDb);
-        if (f->barrierBoomKmh > 0 && f->onFoot) {
-            if (!s.past_barrier && s.speed_kmh >= f->barrierBoomKmh) { s.past_barrier = true; audio::play(Sound::sonic_boom); }
-            else if (s.past_barrier && s.speed_kmh < f->barrierBoomKmh * 0.9f) s.past_barrier = false;
-        }
     }
 
     // ---------------- Frontiers boost effect: speed blur, aura, flash when a boost starts

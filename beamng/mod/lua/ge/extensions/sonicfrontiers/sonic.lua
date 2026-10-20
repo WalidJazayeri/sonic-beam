@@ -39,7 +39,6 @@ typedef struct {
   float animSpeed;
   float animLimit;
   float windDb;
-  float barrierBoomKmh;
   float boostBoomKmh;
   float toSun[3];
   float groundPos[3];
@@ -96,7 +95,6 @@ local settings = {
   animSpeed = 1,        -- run-cycle cadence multiplier
   animLimit = 1,        -- run-cycle ceiling multiplier
   windDb = 0,           -- Frontiers' speed wind
-  barrierBoom = true, barrierBoomKmh = 1235,   -- sonic boom when breaking this speed (sound barrier)
   boostBoom = true, boostBoomKmh = 200,        -- sonic boom on a boost started at least this fast
   shadowOpacity = 0.55, -- Sonic's shadow
 }
@@ -147,8 +145,6 @@ local function openLab()
     animSpeed = im.FloatPtr(settings.animSpeed),
     animLimit = im.FloatPtr(settings.animLimit),
     windDb = im.FloatPtr(settings.windDb),
-    barrierBoom = im.BoolPtr(settings.barrierBoom),
-    barrierBoomKmh = im.FloatPtr(settings.barrierBoomKmh),
     boostBoom = im.BoolPtr(settings.boostBoom),
     boostBoomKmh = im.FloatPtr(settings.boostBoomKmh),
     shadowOpacity = im.FloatPtr(settings.shadowOpacity),
@@ -202,7 +198,6 @@ local function drawLab()
   labSlider('Footsteps', w.stepsDb, 'stepsDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
   labSlider('All Sonic sounds', w.soundDb, 'soundDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
   labSlider('Wind', w.windDb, 'windDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
-  labBoom('Sonic boom at the sound barrier', w.barrierBoom, 'barrierBoom', w.barrierBoomKmh, 'barrierBoomKmh', 300, 2000, 1235)
   labBoom('Sonic boom on a fast boost', w.boostBoom, 'boostBoom', w.boostBoomKmh, 'boostBoomKmh', 50, 1000, 200)
   im.Spacing()
   im.Text('Shadow')
@@ -214,7 +209,7 @@ local function drawLab()
   labSlider('Animation speed', w.animSpeed, 'animSpeed', 0.5, 3, timesText, 1, 'x1')
   labSlider('Animation speed limit', w.animLimit, 'animLimit', 0.5, 3, timesText, 1, 'x1')
   im.Separator()
-  if im.Button('Close') then w.open[0] = false end
+  if im.Button('Close and save') then w.open[0] = false end
   im.End()
   if not w.open[0] then labOpen = false; saveSettings() end
 end
@@ -594,7 +589,6 @@ sendFrame = function()
   else
     frame.hasGround = 0
   end
-  frame.barrierBoomKmh = settings.barrierBoom and settings.barrierBoomKmh or 0
   frame.boostBoomKmh = settings.boostBoom and settings.boostBoomKmh or 0
   frame.wantsMove = runnerWantsMove
   local count = 0

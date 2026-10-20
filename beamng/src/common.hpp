@@ -38,7 +38,7 @@ extern "C" struct SbFrame {
     float stepsDb, soundDb;            // Sonic Beam Lab: footsteps and all sounds, decibels (-40 mutes)
     float animSpeed, animLimit;        // Sonic Beam Lab: run-cycle speed and ceiling multipliers
     float windDb;                      // Sonic Beam Lab: speed wind, decibels (-40 mutes)
-    float barrierBoomKmh, boostBoomKmh; // Sonic Beam Lab: sonic boom at this speed / on a boost started this fast (0: off)
+    float boostBoomKmh;                // Sonic Beam Lab: sonic boom on a boost started this fast (0: off)
     float toSun[3];                    // unit vector toward the sun (BeamNG's sky)
     float groundPos[3], groundNormal[3]; // ground under Sonic and its slope
     float shadowOpacity;               // Sonic Beam Lab: 0..1

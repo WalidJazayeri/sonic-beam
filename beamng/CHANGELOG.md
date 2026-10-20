@@ -5,6 +5,10 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.4.1
+- Labo : le bouton « Close » devient « Close and save » (il enregistrait déjà, c'est maintenant explicite).
+- Bang au mur du son supprimé (réglage, ligne du labo et déclenchement). Le bang au lancement d'un boost rapide reste.
+
 ## v0.4.0
 - Ombre dynamique de Sonic : sa silhouette (animée) aplatie sur le sol dans la direction du soleil de BeamNG (azimut et hauteur lus dans le ciel du jeu), sur la pente mesurée sous ses pieds, qui s'efface quand il saute ; chaque pixel n'est assombri qu'une fois (stencil). Soleil bas ou nuit : ombre ronde douce.
 - Labo : section « Shadow » avec « Shadow opacity » (0 à 100 %, 55 % par défaut).
