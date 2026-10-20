@@ -5,6 +5,11 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.4.0
+- Ombre dynamique de Sonic : sa silhouette (animée) aplatie sur le sol dans la direction du soleil de BeamNG (azimut et hauteur lus dans le ciel du jeu), sur la pente mesurée sous ses pieds, qui s'efface quand il saute ; chaque pixel n'est assombri qu'une fois (stencil). Soleil bas ou nuit : ombre ronde douce.
+- Labo : section « Shadow » avec « Shadow opacity » (0 à 100 %, 55 % par défaut).
+- Rendus D3D11 et D3D12 : tampon de profondeur avec stencil ; 9 shaders vérifiés au build.
+
 ## v0.3.3
 - Vent de vitesse de Sonic Frontiers (`sn_relative_wind`) : en boucle, de 80 à 600 km/h, plus fort et plus aigu avec la vitesse, au moins aux 3/5 pendant le boost.
 - Bang supersonique (`sn_sonic_boom`) : au mur du son (1 235 km/h, réarmé sous 90 %) et au lancement d'un boost à 200 km/h ou plus.

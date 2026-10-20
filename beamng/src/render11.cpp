@@ -57,13 +57,13 @@ struct Renderer {
     DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
     int color_mode = 0;                            // 0 UNORM, 1 scRGB, 2 sRGB
     ID3D11VertexShader *vs_mesh = nullptr, *vs_flat = nullptr, *vs_aura = nullptr, *vs_post = nullptr;
-    ID3D11PixelShader *ps_mesh = nullptr, *ps_flat = nullptr, *ps_aura = nullptr, *ps_post = nullptr;
+    ID3D11PixelShader *ps_mesh = nullptr, *ps_flat = nullptr, *ps_aura = nullptr, *ps_post = nullptr, *ps_shadow = nullptr;
     ID3D11InputLayout *layout_mesh = nullptr, *layout_flat = nullptr;
     ID3D11Buffer *cb_draw = nullptr, *cb_bones = nullptr, *flat_vb = nullptr;
     UINT flat_capacity = 0;
     ID3D11SamplerState *samplers[3] = {};
     ID3D11BlendState *blend = nullptr, *blend_add = nullptr, *blend_off = nullptr;
-    ID3D11DepthStencilState *depth_on = nullptr, *depth_off = nullptr, *depth_test = nullptr;
+    ID3D11DepthStencilState *depth_on = nullptr, *depth_off = nullptr, *depth_test = nullptr, *stencil_once = nullptr;
     ID3D11RasterizerState *raster = nullptr;
     std::vector<ID3D11ShaderResourceView *> textures;
     int font_texture = 0, white_texture = 0;
@@ -97,10 +97,10 @@ void set_status(const char *text) { std::snprintf(status, sizeof(status), "%s", 
 
 bool create_pipeline()
 {
-    ID3DBlob *code[8] = {}, *errors = nullptr;
-    const char *entries[8] = {"vsMesh", "psMesh", "vsFlat", "psFlat", "vsAura", "psAura", "vsPost", "psPost"};
-    const char *targets[8] = {"vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0"};
-    for (int i = 0; i < 8; ++i) {
+    ID3DBlob *code[9] = {}, *errors = nullptr;
+    const char *entries[9] = {"vsMesh", "psMesh", "vsFlat", "psFlat", "vsAura", "psAura", "vsPost", "psPost", "psShadow"};
+    const char *targets[9] = {"vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "ps_5_0"};
+    for (int i = 0; i < 9; ++i) {
         if (FAILED(D3DCompile(draw::kShader, sizeof(draw::kShader) - 1, "sonic_beam", nullptr, nullptr, entries[i], targets[i], D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code[i], &errors))) {
             if (errors) mod::log("render: shader %s: %s", entries[i], static_cast<const char *>(errors->GetBufferPointer()));
             release(errors);
@@ -116,7 +116,8 @@ bool create_pipeline()
               SUCCEEDED(r.device->CreateVertexShader(code[4]->GetBufferPointer(), code[4]->GetBufferSize(), nullptr, &r.vs_aura)) &&
               SUCCEEDED(r.device->CreatePixelShader(code[5]->GetBufferPointer(), code[5]->GetBufferSize(), nullptr, &r.ps_aura)) &&
               SUCCEEDED(r.device->CreateVertexShader(code[6]->GetBufferPointer(), code[6]->GetBufferSize(), nullptr, &r.vs_post)) &&
-              SUCCEEDED(r.device->CreatePixelShader(code[7]->GetBufferPointer(), code[7]->GetBufferSize(), nullptr, &r.ps_post));
+              SUCCEEDED(r.device->CreatePixelShader(code[7]->GetBufferPointer(), code[7]->GetBufferSize(), nullptr, &r.ps_post)) &&
+              SUCCEEDED(r.device->CreatePixelShader(code[8]->GetBufferPointer(), code[8]->GetBufferSize(), nullptr, &r.ps_shadow));
     const D3D11_INPUT_ELEMENT_DESC mesh_input[] = {
         {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
         {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
@@ -162,6 +163,11 @@ bool create_pipeline()
     ok = ok && SUCCEEDED(r.device->CreateDepthStencilState(&ds, &r.depth_off));
     ds.DepthEnable = TRUE;                                          // the aura hides behind Sonic, writes no depth
     ok = ok && SUCCEEDED(r.device->CreateDepthStencilState(&ds, &r.depth_test));
+    // Sonic's projected shadow: no depth, each pixel darkened once (stencil 0 -> 1)
+    ds.DepthEnable = FALSE; ds.StencilEnable = TRUE; ds.StencilReadMask = 0xff; ds.StencilWriteMask = 0xff;
+    ds.FrontFace = {D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_KEEP, D3D11_STENCIL_OP_INCR_SAT, D3D11_COMPARISON_EQUAL};
+    ds.BackFace = ds.FrontFace;
+    ok = ok && SUCCEEDED(r.device->CreateDepthStencilState(&ds, &r.stencil_once));
     D3D11_RASTERIZER_DESC rs{};
     rs.FillMode = D3D11_FILL_SOLID; rs.CullMode = D3D11_CULL_NONE; rs.DepthClipEnable = TRUE;
     ok = ok && SUCCEEDED(r.device->CreateRasterizerState(&rs, &r.raster));
@@ -272,7 +278,7 @@ bool ensure_targets(IDXGISwapChain *chain)
     if (FAILED(hr)) return false;
     r.color_mode = view == DXGI_FORMAT_R16G16B16A16_FLOAT ? 1 : (view == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB || view == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB) ? 2 : 0;
     D3D11_TEXTURE2D_DESC dd{};
-    dd.Width = bd.Width; dd.Height = bd.Height; dd.MipLevels = 1; dd.ArraySize = 1; dd.Format = DXGI_FORMAT_D32_FLOAT;
+    dd.Width = bd.Width; dd.Height = bd.Height; dd.MipLevels = 1; dd.ArraySize = 1; dd.Format = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
     dd.SampleDesc.Count = 1; dd.Usage = D3D11_USAGE_DEFAULT; dd.BindFlags = D3D11_BIND_DEPTH_STENCIL;
     if (FAILED(r.device->CreateTexture2D(&dd, nullptr, &r.depth)) || FAILED(r.device->CreateDepthStencilView(r.depth, nullptr, &r.dsv))) return false;
     r.width = bd.Width; r.height = bd.Height; r.format = view;
@@ -494,7 +500,7 @@ void draw_frame(IDXGISwapChain *chain)
     ID3DDeviceContextState *previous = nullptr;
     r.context->SwapDeviceContextState(r.state, &previous);
     r.context->OMSetRenderTargets(1, &r.rtv, r.dsv);
-    r.context->ClearDepthStencilView(r.dsv, D3D11_CLEAR_DEPTH, 0.0f, 0);
+    r.context->ClearDepthStencilView(r.dsv, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 0.0f, 0);
     D3D11_VIEWPORT vp{0, 0, float(r.width), float(r.height), 0, 1};
     r.context->RSSetViewports(1, &vp);
     r.context->RSSetState(r.raster);
@@ -514,12 +520,28 @@ void draw_frame(IDXGISwapChain *chain)
             const float uv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
             for (int k : {0, 1, 2, 0, 2, 3}) {
                 const float *p = scene.shadow_corners[k];
-                v.push_back({{p[0], p[1], p[2]}, {uv[k][0], uv[k][1]}, {0, 0, 0, 0.45f}});
+                v.push_back({{p[0], p[1], p[2]}, {uv[k][0], uv[k][1]}, {0, 0, 0, scene.shadow_alpha}});
             }
             draw_flat(v, scene.view, scene.proj, 1, r.white_texture);
         }
         if (scene.sonic_visible && !scene.pose.empty()) {
             bind_bones(scene.pose.data(), scene.pose.size());
+            if (scene.sonic_shadow) {
+                float mv[16];
+                draw::mul(scene.sonic_shadow_model, scene.view, mv);
+                DrawConstants dc{};
+                std::memcpy(dc.model_view, mv, 64); std::memcpy(dc.proj, scene.proj, 64);
+                dc.tint[3] = scene.sonic_shadow_alpha; dc.params[3] = float(r.color_mode);
+                bind_constants(dc);
+                const UINT stride = sizeof(frontiers::Vertex), offset = 0;
+                r.context->IASetVertexBuffers(0, 1, &r.sonic.vb, &stride, &offset);
+                r.context->IASetIndexBuffer(r.sonic.ib, DXGI_FORMAT_R16_UINT, 0);
+                r.context->IASetInputLayout(r.layout_mesh);
+                r.context->VSSetShader(r.vs_mesh, nullptr, 0);
+                r.context->PSSetShader(r.ps_shadow, nullptr, 0);
+                r.context->OMSetDepthStencilState(r.stencil_once, 0);
+                for (auto &m : r.sonic.meshes) r.context->DrawIndexed(m.index_count, m.first_index, INT(m.base_vertex));
+            }
             draw_mesh(r.sonic, scene.sonic_model, scene.view, scene.proj, 1, 0);
             drew_sonic = true;
             if (r.has_aura && scene.aura > 0.01f) { draw_aura(scene, 0); draw_aura(scene, 1); }

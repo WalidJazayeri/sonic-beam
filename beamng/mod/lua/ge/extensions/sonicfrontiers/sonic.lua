@@ -41,6 +41,11 @@ typedef struct {
   float windDb;
   float barrierBoomKmh;
   float boostBoomKmh;
+  float toSun[3];
+  float groundPos[3];
+  float groundNormal[3];
+  float shadowOpacity;
+  int32_t hasGround;
   int32_t ringCount;
   float rings[768];
 } SonicBeamPacket;
@@ -93,6 +98,7 @@ local settings = {
   windDb = 0,           -- Frontiers' speed wind
   barrierBoom = true, barrierBoomKmh = 1235,   -- sonic boom when breaking this speed (sound barrier)
   boostBoom = true, boostBoomKmh = 200,        -- sonic boom on a boost started at least this fast
+  shadowOpacity = 0.55, -- Sonic's shadow
 }
 local menuOpen = false
 local menuWidgets = nil
@@ -145,6 +151,7 @@ local function openLab()
     barrierBoomKmh = im.FloatPtr(settings.barrierBoomKmh),
     boostBoom = im.BoolPtr(settings.boostBoom),
     boostBoomKmh = im.FloatPtr(settings.boostBoomKmh),
+    shadowOpacity = im.FloatPtr(settings.shadowOpacity),
     open = im.BoolPtr(true),
     place = true,
   }
@@ -197,6 +204,10 @@ local function drawLab()
   labSlider('Wind', w.windDb, 'windDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
   labBoom('Sonic boom at the sound barrier', w.barrierBoom, 'barrierBoom', w.barrierBoomKmh, 'barrierBoomKmh', 300, 2000, 1235)
   labBoom('Sonic boom on a fast boost', w.boostBoom, 'boostBoom', w.boostBoomKmh, 'boostBoomKmh', 50, 1000, 200)
+  im.Spacing()
+  im.Text('Shadow')
+  im.Separator()
+  labSlider('Shadow opacity', w.shadowOpacity, 'shadowOpacity', 0, 1, function(x) return string.format('%d %%', math.floor(x * 100 + 0.5)) end, 0.55, '55 %')
   im.Spacing()
   im.Text('Animation')
   im.Separator()
@@ -309,6 +320,41 @@ local function ensureOnFoot()
   end
 end
 
+-- Ground under Sonic for his shadow: the point straight below him and the slope there (three
+-- rays around his feet). Read every frame in updateBody.
+local groundPos, groundNormal = nil, vec3(0, 0, 1)
+local function readGround(center)
+  local d = groundBelow(center, 50)
+  if not d then groundPos = nil return end
+  groundPos = center + down * d
+  local pts = {}
+  for k = 0, 2 do
+    local a = k * 2.094
+    local top = vec3(center.x + math.cos(a) * 0.45, center.y + math.sin(a) * 0.45, center.z)
+    local h = groundBelow(top, 50)
+    if not h then return end
+    pts[#pts + 1] = top + down * h
+  end
+  local n = (pts[2] - pts[1]):cross(pts[3] - pts[1])
+  if n:length() < 1e-6 then return end
+  n:normalize()
+  if n.z < 0 then n = -n end
+  groundNormal = n
+end
+
+-- Sun direction from BeamNG's sky (azimuth / elevation in degrees), read once a second
+local toSun, sunReadAt = vec3(-0.35, 0.45, 0.82):normalized(), -100
+local function readSun()
+  if clock - sunReadAt < 1 then return end
+  sunReadAt = clock
+  local sky = scenetree and scenetree.sunsky
+  if not sky then return end
+  local ok, az, el = pcall(function() return tonumber(sky.azimuth), tonumber(sky.elevation) end)
+  if not ok or not az or not el then return end
+  local a, e = math.rad(az), math.rad(el)
+  toSun = vec3(math.sin(a) * math.cos(e), math.cos(a) * math.cos(e), math.sin(e))
+end
+
 local function updateBody(unicycle)
   local id = unicycle:getId()
   local center = vec3(be:getObjectOOBBCenterXYZ(id))
@@ -318,6 +364,7 @@ local function updateBody(unicycle)
   local vel = vec3(unicycle:getVelocityXYZ())
   -- a respawn or teleport shows up as an absurd one-frame velocity: keep the last real one
   if vel:length() - bodyVel:length() < 40 then bodyVel = vel end
+  readGround(center)
   local d = groundBelow(center, half + 3)
   if d and d <= half + sheets.physics.groundProbe then
     bodyFeet = center + down * d
@@ -537,6 +584,16 @@ sendFrame = function()
   frame.animSpeed = settings.animSpeed
   frame.animLimit = settings.animLimit
   frame.windDb = settings.windDb
+  readSun()
+  frame.toSun[0], frame.toSun[1], frame.toSun[2] = toSun.x, toSun.y, toSun.z
+  frame.shadowOpacity = settings.shadowOpacity
+  if groundPos then
+    frame.hasGround = 1
+    frame.groundPos[0], frame.groundPos[1], frame.groundPos[2] = groundPos.x, groundPos.y, groundPos.z
+    frame.groundNormal[0], frame.groundNormal[1], frame.groundNormal[2] = groundNormal.x, groundNormal.y, groundNormal.z
+  else
+    frame.hasGround = 0
+  end
   frame.barrierBoomKmh = settings.barrierBoom and settings.barrierBoomKmh or 0
   frame.boostBoomKmh = settings.boostBoom and settings.boostBoomKmh or 0
   frame.wantsMove = runnerWantsMove

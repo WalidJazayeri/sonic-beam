@@ -60,6 +60,8 @@ float4 psFlat(FOut i) : SV_Target {
     else a = tex.Sample(pointS, i.uv).r;
     return float4(output(i.c.rgb), i.c.a * a);
 }
+// Sonic's projected shadow: flat dark silhouette, drawn once per pixel (stencil)
+float4 psShadow(PSIn i) : SV_Target { return float4(0, 0, 0, tint.a); }
 // Boost aura, after Frontiers' SonicAura material: Sonic's aura shell on his own pose, brighter
 // toward the silhouette (falloff) with the aura texture streaming over it. Drawn additive.
 // params.x: push along the normal (model units), params.y: time; tint: colour and brightness.
@@ -127,7 +129,7 @@ inline std::vector<FlatVertex> shadow_vertices(const game::Scene &scene)
     const float uv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
     for (int k : {0, 1, 2, 0, 2, 3}) {
         const float *p = scene.shadow_corners[k];
-        v.push_back({{p[0], p[1], p[2]}, {uv[k][0], uv[k][1]}, {0, 0, 0, 0.45f}});
+        v.push_back({{p[0], p[1], p[2]}, {uv[k][0], uv[k][1]}, {0, 0, 0, scene.shadow_alpha}});
     }
     return v;
 }

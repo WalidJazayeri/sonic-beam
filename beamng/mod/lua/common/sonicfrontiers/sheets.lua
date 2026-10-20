@@ -44,6 +44,9 @@ M.camera = {
   wallMargin = 0.3,
 }
 M.tuning = {
+  shadowSunMin = 0.12,
+  shadowFadeMeters = 3.0,
+  shadowLift = 0.03,
   windStartKmh = 80,
   windFullKmh = 600,
   windBoost = 0.6,

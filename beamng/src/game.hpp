@@ -36,8 +36,12 @@ struct Scene {
     bool sonic_visible = false;
     float sonic_model[16];         // model -> world
     std::vector<float> pose;       // nodes * 12 skinning matrices
-    bool shadow = false;
+    bool shadow = false;           // soft round shadow (night, low sun)
     float shadow_corners[4][3];    // world space
+    float shadow_alpha = 0.45f;
+    bool sonic_shadow = false;     // Sonic flattened onto the ground along the sun
+    float sonic_shadow_model[16];  // model -> world, flattened
+    float sonic_shadow_alpha = 0;
     std::vector<Instance> rings;
     std::vector<Text> texts;
     // boost effect

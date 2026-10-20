@@ -143,6 +143,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     scene.camera = false;
     scene.sonic_visible = false;
     scene.shadow = false;
+    scene.sonic_shadow = false;
     scene.rings.clear();
     scene.texts.clear();
     scene.sprites.clear();
@@ -316,13 +317,41 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
             const float w = float(s.player.blend);
             for (uint32_t i = 0; i < n; ++i) scene.pose[i] = s.scratch[i] + (scene.pose[i] - s.scratch[i]) * w;
         }
-        scene.shadow = !s.air;
-        const float rr = 0.42f;
-        const float c[4][2] = {{-rr, -rr}, {rr, -rr}, {rr, rr}, {-rr, rr}};
-        for (int i = 0; i < 4; ++i) {
-            scene.shadow_corners[i][0] = feet.x + c[i][0];
-            scene.shadow_corners[i][1] = feet.y + c[i][1];
-            scene.shadow_corners[i][2] = feet.z + 0.02f;
+        // Shadow: Sonic flattened onto the ground under him along the sun (BeamNG's sky), on the
+        // ground's slope, fading as he rises; a soft round one when the sun is low or at night.
+        const float opacity = std::max(0.0f, std::min(1.0f, f->shadowOpacity));
+        const V3 ground = f->hasGround ? v3(f->groundPos) : feet;
+        V3 gn = f->hasGround ? norm(v3(f->groundNormal)) : V3{0, 0, 1};
+        if (gn.z < 0.2f) gn = {0, 0, 1};
+        const float height = std::max(0.0f, feet.z - ground.z);
+        const float fade = std::max(0.0f, 1 - height / tuning::shadowFadeMeters);
+        const V3 sun = norm(v3(f->toSun));
+        const float sun_up = std::max(0.0f, std::min(1.0f, (sun.z - tuning::shadowSunMin) / 0.15f));
+        if (sun_up > 0 && opacity > 0 && fade > 0) {
+            // planar projection along the light: p' = p - L (n.p + dd) / (n.L), L = -sun
+            const V3 L = sun * -1.0f;
+            const float nl = dot(gn, L);
+            const V3 on = ground + gn * tuning::shadowLift;
+            const float dd = -dot(gn, on);
+            M4 flat = identity();
+            const float nn[3] = {gn.x, gn.y, gn.z}, ll[3] = {L.x, L.y, L.z};
+            for (int i = 0; i < 3; ++i) for (int j = 0; j < 3; ++j) flat.m[i * 4 + j] -= nn[i] * ll[j] / nl;
+            for (int j = 0; j < 3; ++j) flat.m[12 + j] = -dd * ll[j] / nl;
+            copy(mul(sonic, flat), scene.sonic_shadow_model);
+            scene.sonic_shadow = true;
+            scene.sonic_shadow_alpha = opacity * fade * sun_up;
+        }
+        const float soft = opacity * fade * (1 - sun_up) * 0.8f;
+        if (soft > 0.01f) {
+            scene.shadow = true;
+            scene.shadow_alpha = soft;
+            const float rr = 0.42f;
+            const float c[4][2] = {{-rr, -rr}, {rr, -rr}, {rr, rr}, {-rr, rr}};
+            for (int i = 0; i < 4; ++i) {
+                scene.shadow_corners[i][0] = ground.x + c[i][0];
+                scene.shadow_corners[i][1] = ground.y + c[i][1];
+                scene.shadow_corners[i][2] = ground.z + 0.02f;
+            }
         }
         if (s.first_shown < 0) s.first_shown = now;
     }

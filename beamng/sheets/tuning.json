@@ -9,6 +9,9 @@
     "verified": "checked in BeamNG"
   },
   "rows": [
+    {"id": "shadowSunMin",      "value": 0.12, "unit": "x",     "purpose": "sun height (sine of its elevation) below which the projected shadow gives way to the soft one", "verified": false},
+    {"id": "shadowFadeMeters",  "value": 3.0,  "unit": "m",     "purpose": "height above the ground at which Sonic's shadow has faded out",     "verified": false},
+    {"id": "shadowLift",        "value": 0.03, "unit": "m",     "purpose": "shadow drawn this far above the ground",                            "verified": false},
     {"id": "windStartKmh",      "value": 80,   "unit": "km/h",  "purpose": "speed where Frontiers' relative-wind sound starts",                 "verified": false},
     {"id": "windFullKmh",       "value": 600,  "unit": "km/h",  "purpose": "speed where the wind is at full volume and highest pitch",          "verified": false},
     {"id": "windBoost",         "value": 0.6,  "unit": "x",     "purpose": "least wind while boosting (on top of the speed share)",             "verified": false},

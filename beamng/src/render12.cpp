@@ -63,6 +63,7 @@ struct Context {
     ID3D12RootSignature *root = nullptr;
     ID3D12PipelineState *mesh = nullptr, *flat = nullptr;
     ID3D12PipelineState *aura = nullptr, *glow = nullptr, *post = nullptr;   // boost effect
+    ID3D12PipelineState *shadow = nullptr;          // Sonic's projected shadow (stencil: once per pixel)
     DXGI_FORMAT pipeline_format = DXGI_FORMAT_UNKNOWN;
     bool uploaded = false;
     std::vector<ID3D12Resource *> textures, staging;
@@ -154,12 +155,12 @@ bool init_context()
 bool build_pipelines(DXGI_FORMAT format)
 {
     if (c.pipeline_format == format && c.mesh) return true;
-    release(c.mesh); release(c.flat); release(c.aura); release(c.glow); release(c.post);
-    ID3DBlob *code[8] = {}, *errors = nullptr;
-    const char *entries[8] = {"vsMesh", "psMesh", "vsFlat", "psFlat", "vsAura", "psAura", "vsPost", "psPost"};
-    const char *targets[8] = {"vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0"};
+    release(c.mesh); release(c.flat); release(c.aura); release(c.glow); release(c.post); release(c.shadow);
+    ID3DBlob *code[9] = {}, *errors = nullptr;
+    const char *entries[9] = {"vsMesh", "psMesh", "vsFlat", "psFlat", "vsAura", "psAura", "vsPost", "psPost", "psShadow"};
+    const char *targets[9] = {"vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "vs_5_0", "ps_5_0", "ps_5_0"};
     bool ok = true;
-    for (int i = 0; i < 8 && ok; ++i) {
+    for (int i = 0; i < 9 && ok; ++i) {
         ok = SUCCEEDED(D3DCompile(draw::kShader, sizeof(draw::kShader) - 1, "sonic_beam", nullptr, nullptr, entries[i], targets[i], D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code[i], &errors));
         if (!ok && errors) mod::log("render12: shader %s: %s", entries[i], static_cast<const char *>(errors->GetBufferPointer()));
         release(errors);
@@ -186,7 +187,7 @@ bool build_pipelines(DXGI_FORMAT format)
         pd.SampleMask = UINT_MAX;
         pd.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID; pd.RasterizerState.CullMode = D3D12_CULL_MODE_NONE; pd.RasterizerState.DepthClipEnable = TRUE;
         pd.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        pd.NumRenderTargets = 1; pd.RTVFormats[0] = format; pd.DSVFormat = DXGI_FORMAT_D32_FLOAT; pd.SampleDesc.Count = 1;
+        pd.NumRenderTargets = 1; pd.RTVFormats[0] = format; pd.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT; pd.SampleDesc.Count = 1;
         pd.DepthStencilState.DepthEnable = TRUE; pd.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
         pd.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
         pd.VS = {code[0]->GetBufferPointer(), code[0]->GetBufferSize()}; pd.PS = {code[1]->GetBufferPointer(), code[1]->GetBufferSize()};
@@ -209,6 +210,16 @@ bool build_pipelines(DXGI_FORMAT format)
         pd.VS = {code[6]->GetBufferPointer(), code[6]->GetBufferSize()}; pd.PS = {code[7]->GetBufferPointer(), code[7]->GetBufferSize()};
         pd.InputLayout = {nullptr, 0};
         ok = ok && SUCCEEDED(c.device->CreateGraphicsPipelineState(&pd, IID_PPV_ARGS(&c.post)));
+        // shadow: Sonic's mesh flattened, alpha blended, each pixel darkened once (stencil 0 -> 1)
+        blend.BlendEnable = TRUE;
+        blend.SrcBlend = D3D12_BLEND_SRC_ALPHA; blend.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+        pd.VS = {code[0]->GetBufferPointer(), code[0]->GetBufferSize()}; pd.PS = {code[8]->GetBufferPointer(), code[8]->GetBufferSize()};
+        pd.InputLayout = {mesh_input, 5};
+        pd.DepthStencilState.StencilEnable = TRUE;
+        pd.DepthStencilState.StencilReadMask = 0xff; pd.DepthStencilState.StencilWriteMask = 0xff;
+        pd.DepthStencilState.FrontFace = {D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_KEEP, D3D12_STENCIL_OP_INCR_SAT, D3D12_COMPARISON_FUNC_EQUAL};
+        pd.DepthStencilState.BackFace = pd.DepthStencilState.FrontFace;
+        ok = ok && SUCCEEDED(c.device->CreateGraphicsPipelineState(&pd, IID_PPV_ARGS(&c.shadow)));
     }
     for (auto *b : code) if (b) b->Release();
     if (ok) c.pipeline_format = format;
@@ -246,8 +257,8 @@ bool ensure_targets()
     }
     D3D12_RESOURCE_DESC dd{};
     dd.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D; dd.Width = desc.BufferDesc.Width; dd.Height = desc.BufferDesc.Height;
-    dd.DepthOrArraySize = 1; dd.MipLevels = 1; dd.Format = DXGI_FORMAT_D32_FLOAT; dd.SampleDesc.Count = 1; dd.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-    D3D12_CLEAR_VALUE clear{}; clear.Format = DXGI_FORMAT_D32_FLOAT; clear.DepthStencil.Depth = 0;
+    dd.DepthOrArraySize = 1; dd.MipLevels = 1; dd.Format = DXGI_FORMAT_D32_FLOAT_S8X24_UINT; dd.SampleDesc.Count = 1; dd.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+    D3D12_CLEAR_VALUE clear{}; clear.Format = DXGI_FORMAT_D32_FLOAT_S8X24_UINT; clear.DepthStencil.Depth = 0;
     auto h = heap(D3D12_HEAP_TYPE_DEFAULT);
     if (FAILED(c.device->CreateCommittedResource(&h, D3D12_HEAP_FLAG_NONE, &dd, D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear, IID_PPV_ARGS(&c.depth)))) return false;
     c.device->CreateDepthStencilView(c.depth, nullptr, c.dsv->GetCPUDescriptorHandleForHeapStart());
@@ -530,7 +541,7 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
     auto rtv = c.rtv->GetCPUDescriptorHandleForHeapStart(); rtv.ptr += SIZE_T(index) * c.rtv_stride;
     auto dsv = c.dsv->GetCPUDescriptorHandleForHeapStart();
     c.list->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
-    c.list->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.0f, 0, 0, nullptr);
+    c.list->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 0.0f, 0, 0, nullptr);
     D3D12_VIEWPORT vp{0, 0, float(c.width), float(c.height), 0, 1};
     D3D12_RECT scissor{0, 0, LONG(c.width), LONG(c.height)};
     c.list->RSSetViewports(1, &vp); c.list->RSSetScissorRects(1, &scissor);
@@ -557,6 +568,24 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
         std::vector<float> bones(768 * 4, 0.0f);
         std::memcpy(bones.data(), scene.pose.data(), std::min(bones.size(), scene.pose.size()) * 4);
         const auto b = push(f, bones.data(), bones.size() * 4);
+        if (b && scene.sonic_shadow && c.shadow) {
+            float mv[16];
+            draw::mul(scene.sonic_shadow_model, scene.view, mv);
+            draw::DrawConstants dc{};
+            std::memcpy(dc.model_view, mv, 64); std::memcpy(dc.proj, scene.proj, 64);
+            dc.tint[3] = scene.sonic_shadow_alpha; dc.params[3] = float(c.color_mode);
+            const auto cb = push(f, &dc, sizeof(dc));
+            if (cb) {
+                c.list->SetPipelineState(c.shadow);
+                c.list->OMSetStencilRef(0);
+                c.list->SetGraphicsRootConstantBufferView(0, cb);
+                c.list->SetGraphicsRootConstantBufferView(1, b);
+                c.list->SetGraphicsRootDescriptorTable(2, srv_handle(c.white_texture));
+                c.list->IASetVertexBuffers(0, 1, &c.sonic.vbv);
+                c.list->IASetIndexBuffer(&c.sonic.ibv);
+                for (auto &m : c.sonic.meshes) c.list->DrawIndexedInstanced(m.index_count, 1, m.first_index, INT(m.base_vertex), 0);
+            }
+        }
         if (b) {
             draw_mesh(f, c.sonic, b, scene.sonic_model, scene.view, scene.proj, 1, 0);
             drew_sonic = true;

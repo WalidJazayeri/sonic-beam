@@ -8,7 +8,7 @@
 
 int main()
 {
-    const char *entries[] = {"vsMesh", "psMesh", "vsFlat", "psFlat", "vsAura", "psAura", "vsPost", "psPost"};
+    const char *entries[] = {"vsMesh", "psMesh", "vsFlat", "psFlat", "vsAura", "psAura", "vsPost", "psPost", "psShadow"};
     int failed = 0;
     for (const char *e : entries) {
         ID3DBlob *code = nullptr, *errors = nullptr;
