@@ -1,0 +1,20 @@
+{
+  "sheet": "tuning",
+  "about": "Numbers the native renderer uses to read Sonic's motion and place him. Each row becomes one C++ constant.",
+  "columns": {
+    "id": "constant name",
+    "value": "number",
+    "unit": "unit",
+    "purpose": "what it controls",
+    "verified": "checked in BeamNG"
+  },
+  "rows": [
+    {"id": "sonicHeightMeters", "value": 1.0,  "unit": "m",     "purpose": "Sonic's standing height in BeamNG's world",                     "verified": false},
+    {"id": "speedSmoothing",    "value": 0.12, "unit": "s",     "purpose": "time constant smoothing his speed for animation",               "verified": false},
+    {"id": "turnRateDegrees",   "value": 70,   "unit": "deg/s", "purpose": "yaw rate that counts as a hard turn (drift while boosting)",     "verified": false},
+    {"id": "facingRate",        "value": 12,   "unit": "1/s",   "purpose": "how fast Sonic turns to face where he runs",                    "verified": false},
+    {"id": "leanDegrees",       "value": 16,   "unit": "deg",   "purpose": "how far Sonic leans into turns",                                "verified": false},
+    {"id": "nearClip",          "value": 0.05, "unit": "m",     "purpose": "near plane of the projection matching BeamNG's camera",         "verified": false},
+    {"id": "soundVolume",       "value": 0.8,  "unit": "x",     "purpose": "master volume of Frontiers sounds",                             "verified": false}
+  ]
+}

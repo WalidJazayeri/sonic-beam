@@ -1,0 +1,20 @@
+{
+  "sheet": "rings",
+  "about": "How Sonic earns rings. Pickups are the real Frontiers ring (CommonObject.pac cmn_obj_ring.model) placed on BeamNG's ground; the other rules reward running like Sonic. Each row becomes one RingRuleRow (C++) and one entry of SHEETS.rings (Lua).",
+  "columns": {
+    "id": "identifier",
+    "trigger": "pickup = run through a ring, drift = hard boosted turn, air = airtime on landing, boost = starting a boost",
+    "everySeconds": "drift: reward period; air: minimum airtime; pickup/boost: 0",
+    "rings": "rings added each time (air: per second of airtime)",
+    "cooldownSeconds": "minimum time before the rule pays again",
+    "sound": "sounds.id played when it pays",
+    "popup": "how many Frontiers rings burst around Sonic when it pays",
+    "verified": "seen in BeamNG"
+  },
+  "rows": [
+    {"id": "pickup", "trigger": "pickup", "everySeconds": 0,   "rings": 1,  "cooldownSeconds": 0,   "sound": "ring", "popup": 0, "verified": false},
+    {"id": "drift",  "trigger": "drift",  "everySeconds": 1.0, "rings": 5,  "cooldownSeconds": 0,   "sound": "ring", "popup": 5, "verified": false},
+    {"id": "air",    "trigger": "air",    "everySeconds": 0.8, "rings": 10, "cooldownSeconds": 1.0, "sound": "ring", "popup": 8, "verified": false},
+    {"id": "boost",  "trigger": "boost",  "everySeconds": 0,   "rings": 5,  "cooldownSeconds": 6.0, "sound": "ring", "popup": 4, "verified": false}
+  ]
+}

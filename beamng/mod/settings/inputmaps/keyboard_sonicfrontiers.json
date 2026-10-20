@@ -1,0 +1,5 @@
+{
+  "bindings":[
+    {"control":"o", "action":"sonicfrontiers_menu"}
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "sheet": "states",
+  "about": "What Sonic is doing, chosen every frame from his body's motion in BeamNG (speed, ground contact, boost key, turning). The highest-priority row whose conditions hold wins. Each row becomes one StateRow.",
+  "columns": {
+    "id": "identifier",
+    "animation": "animations.id played in this state",
+    "minKmh": "speed must be at least this",
+    "maxKmh": "speed must be below this (9999 = no limit)",
+    "air": "yes = airborne, no = on the ground, any = either",
+    "boost": "yes = boost key held, no = not held, any = either",
+    "turn": "left/right = turning that way hard, any = either",
+    "priority": "higher wins",
+    "minAirSeconds": "seconds airborne before this state can start",
+    "enterSound": "sounds.id played when entering, or none",
+    "verified": "seen in BeamNG"
+  },
+  "rows": [
+    {"id": "trick",       "animation": "trick_up",    "minKmh": 0,  "maxKmh": 9999, "air": "yes", "boost": "any", "turn": "any",   "priority": 90, "minAirSeconds": 0.8, "enterSound": "trick", "verified": false},
+    {"id": "airborne",    "animation": "fall",        "minKmh": 0,  "maxKmh": 9999, "air": "yes", "boost": "any", "turn": "any",   "priority": 80, "minAirSeconds": 0.0, "enterSound": "none",  "verified": false},
+    {"id": "drift_left",  "animation": "drift_left",  "minKmh": 60, "maxKmh": 9999, "air": "no",  "boost": "yes", "turn": "left",  "priority": 70, "minAirSeconds": 0.0, "enterSound": "drift", "verified": false},
+    {"id": "drift_right", "animation": "drift_right", "minKmh": 60, "maxKmh": 9999, "air": "no",  "boost": "yes", "turn": "right", "priority": 70, "minAirSeconds": 0.0, "enterSound": "drift", "verified": false},
+    {"id": "boost",       "animation": "boost",       "minKmh": 30, "maxKmh": 9999, "air": "no",  "boost": "yes", "turn": "any",   "priority": 60, "minAirSeconds": 0.0, "enterSound": "boost", "verified": false},
+    {"id": "fast",        "animation": "boost",       "minKmh": 150, "maxKmh": 9999, "air": "no", "boost": "no",  "turn": "any",   "priority": 50, "minAirSeconds": 0.0, "enterSound": "none",  "verified": false},
+    {"id": "run",         "animation": "run",         "minKmh": 16, "maxKmh": 9999, "air": "no",  "boost": "any", "turn": "any",   "priority": 40, "minAirSeconds": 0.0, "enterSound": "none",  "verified": false},
+    {"id": "walk",        "animation": "walk",        "minKmh": 2,  "maxKmh": 16,   "air": "no",  "boost": "any", "turn": "any",   "priority": 30, "minAirSeconds": 0.0, "enterSound": "none",  "verified": false},
+    {"id": "idle",        "animation": "idle",        "minKmh": 0,  "maxKmh": 2,    "air": "any", "boost": "any", "turn": "any",   "priority": 10, "minAirSeconds": 0.0, "enterSound": "none",  "verified": false}
+  ]
+}

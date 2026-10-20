@@ -1,0 +1,42 @@
+{
+  "sheet": "physics",
+  "about": "How Sonic's body moves in BeamNG. BeamNG's walking-mode body (a balancing ball) carries him; the mod's vehicle extension adds Sonic's speed, boost and jump on top. Each row becomes SHEETS.physics.<id> in Lua.",
+  "columns": {
+    "id": "constant name",
+    "value": "number",
+    "unit": "unit",
+    "purpose": "what it controls",
+    "verified": "checked in BeamNG"
+  },
+  "rows": [
+    {"id": "runSpeed",        "value": 24,   "unit": "m/s",   "purpose": "top running speed without boost (about 86 km/h)",          "verified": false},
+    {"id": "boostSpeed",      "value": 52,   "unit": "m/s",   "purpose": "top speed while boosting (about 190 km/h)",                  "verified": false},
+    {"id": "runAccel",        "value": 16,   "unit": "m/s2",  "purpose": "how fast Sonic reaches his running speed",                   "verified": false},
+    {"id": "boostAccel",      "value": 34,   "unit": "m/s2",  "purpose": "how fast the boost pulls him forward",                       "verified": false},
+    {"id": "brakeAccel",      "value": 20,   "unit": "m/s2",  "purpose": "how fast he slows when the keys are released",               "verified": false},
+    {"id": "turnGain",        "value": 6,    "unit": "1/s",   "purpose": "how quickly his run turns toward the input direction",       "verified": false},
+    {"id": "airControl",      "value": 0.35, "unit": "x",     "purpose": "share of ground control kept in the air",                    "verified": false},
+    {"id": "jumpSpeed",       "value": 10,  "unit": "m/s",   "purpose": "upward speed of a jump (about 3 m high, the same at any speed)",                                     "verified": false},
+    {"id": "extraGravity",    "value": 6,    "unit": "m/s2",  "purpose": "added fall acceleration so jumps feel snappy",               "verified": false},
+    {"id": "groundProbe",     "value": 0.35, "unit": "m",     "purpose": "gap under the body that still counts as on the ground",      "verified": false},
+    {"id": "boostRampKmhPerSecond", "value": 60,  "unit": "km/h/s", "purpose": "default: speed gained every second of boost, with no top speed (menu: Boost acceleration)", "verified": false},
+    {"id": "speedCapOn",      "value": 1,    "unit": "bool",  "purpose": "default: whether the top-speed limit is on (menu: Speed limit)",  "verified": false},
+    {"id": "speedCapKmh",     "value": 600,  "unit": "km/h",  "purpose": "default top speed when the limit is on (menu: Top speed)",       "verified": false},
+    {"id": "coastAccel",      "value": 8,    "unit": "m/s2",  "purpose": "how fast he slows back to running speed after letting go of boost", "verified": false},
+    {"id": "maxTurnAccel",    "value": 70,   "unit": "m/s2",  "purpose": "strongest sideways pull when turning at boost speed",            "verified": false},
+    {"id": "downforce",       "value": 0.003,"unit": "1/m",   "purpose": "extra grip at speed: pull to the ground = downforce x speed squared, on the ground only", "verified": false},
+    {"id": "glideKmh",        "value": 110,  "unit": "km/h",  "purpose": "above this the walking ball stops gripping and Sonic's own forces carry him (no rolling losses)", "verified": false},
+    {"id": "glideFriction",   "value": 0.04, "unit": "x",     "purpose": "share of the ball's ground friction kept while gliding",          "verified": false},
+    {"id": "speedGain",       "value": 4,    "unit": "1/s",   "purpose": "speed controller: push per m/s Sonic is below his target speed",   "verified": false},
+    {"id": "speedLearn",      "value": 8,    "unit": "1/s2",  "purpose": "speed controller: how fast it learns the steady push that cancels drag and friction", "verified": false},
+    {"id": "maxPush",         "value": 600,  "unit": "m/s2",  "purpose": "strongest forward push the speed controller may use",             "verified": false},
+    {"id": "targetLead",      "value": 15,   "unit": "m/s",   "purpose": "target speed never runs further ahead of his real speed (walls do not wind it up)", "verified": false},
+    {"id": "maxDownforce",    "value": 12,   "unit": "m/s2",  "purpose": "ceiling on the speed grip, so he is never pressed through thin floors",   "verified": false},
+    {"id": "coastRate",       "value": 0.4,  "unit": "1/s",   "purpose": "after boost: share of the extra speed lost per second, on top of coastAccel", "verified": false},
+    {"id": "snapMeters",      "value": 0.8,  "unit": "m",     "purpose": "ground this close under a fast Sonic pulls him back onto it (seams and bumps do not launch him)", "verified": false},
+    {"id": "snapKmh",         "value": 60,   "unit": "km/h",  "purpose": "speed above which the ground snap works",                          "verified": false},
+    {"id": "snapAccel",       "value": 60,   "unit": "m/s2",  "purpose": "how hard the ground snap pulls",                                   "verified": false},
+    {"id": "aeroScale",       "value": 0.02, "unit": "x",     "purpose": "share of the walking body's air drag Sonic keeps (Sonic ignores the air; huge drag forces would tear the soft body apart)", "verified": false},
+    {"id": "walkerSprintMs",  "value": 100000, "unit": "m/s", "purpose": "sprint speed given to BeamNG's walking controller so it never brakes Sonic", "verified": false}
+  ]
+}

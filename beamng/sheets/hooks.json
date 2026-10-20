@@ -1,0 +1,166 @@
+{
+  "sheet": "hooks",
+  "about": "Every point where the mod meets BeamNG.drive. The Lua side is BeamNG's official modding (extensions, a camera mode, a vehicle extension). BeamNG's Lua sandbox forbids native code (ffi.load denied, no C function declarations), so the renderer is a version.dll proxy in Bin64 that the Lua reaches over loopback UDP. Each row becomes one HookRow.",
+  "columns": {
+    "id": "identifier",
+    "side": "lua = mod script, native = renderer DLL",
+    "target": "BeamNG function, hook or interface method",
+    "purpose": "why the mod needs it",
+    "implementation": "function that handles it (Lua or C++)",
+    "verified": "observed working inside BeamNG"
+  },
+  "rows": [
+    {
+      "id": "mod_script",
+      "side": "lua",
+      "target": "scripts/sonicfrontiers_sonic/modScript.lua",
+      "purpose": "load the Sonic extension when the mod is active",
+      "implementation": "loadSonicExtension",
+      "verified": true
+    },
+    {
+      "id": "walking",
+      "side": "lua",
+      "target": "gameplay_walk.setWalkingMode",
+      "purpose": "start on foot as Sonic; BeamNG's own key still enters and leaves cars",
+      "implementation": "ensureOnFoot",
+      "verified": true
+    },
+    {
+      "id": "camera_mode",
+      "side": "lua",
+      "target": "core_camera global camera sonicfrontiersChase",
+      "purpose": "third-person camera behind Sonic; tells the body which way is forward",
+      "implementation": "C:update",
+      "verified": true
+    },
+    {
+      "id": "runner",
+      "side": "lua",
+      "target": "vehicle extension sonicfrontiers_runner (onPhysicsStep)",
+      "purpose": "Sonic's run, boost and jump forces on the walking body",
+      "implementation": "onPhysicsStep",
+      "verified": true
+    },
+    {
+      "id": "player_input",
+      "side": "lua",
+      "target": "playerController walkUpDown/walkLeftRight/setSpeedCoef/jump/setCameraControlData",
+      "purpose": "read BeamNG's own walking inputs (W A S D, Shift = boost, Space = jump)",
+      "implementation": "wrapPlayerController",
+      "verified": true
+    },
+    {
+      "id": "ground_rays",
+      "side": "lua",
+      "target": "castRayStatic",
+      "purpose": "put rings on the ground and know when Sonic is in the air",
+      "implementation": "groundBelow",
+      "verified": true
+    },
+    {
+      "id": "udp_link",
+      "side": "lua",
+      "target": "socket.udp() to 127.0.0.1:47613",
+      "purpose": "hand the renderer the camera, Sonic's body and the rings every frame",
+      "implementation": "openRenderer",
+      "verified": true
+    },
+    {
+      "id": "version_proxy",
+      "side": "native",
+      "target": "Bin64\\version.dll (VERSION.dll import of BeamNG.drive.x64.exe)",
+      "purpose": "load the renderer in the game's main process; forward every version API",
+      "implementation": "forward_version_api",
+      "verified": true
+    },
+    {
+      "id": "native_start",
+      "side": "native",
+      "target": "sb_start",
+      "purpose": "start reading Sonic Frontiers, hook the swap chain, open the UDP link",
+      "implementation": "sb_start",
+      "verified": true
+    },
+    {
+      "id": "native_link",
+      "side": "native",
+      "target": "UDP 127.0.0.1:47613",
+      "purpose": "receive each frame from the Lua and answer with the Melty test state",
+      "implementation": "listener",
+      "verified": true
+    },
+    {
+      "id": "native_frame",
+      "side": "native",
+      "target": "sb_frame",
+      "purpose": "receive this frame's camera, body, rings and events",
+      "implementation": "sb_frame",
+      "verified": true
+    },
+    {
+      "id": "present",
+      "side": "native",
+      "target": "IDXGISwapChain::Present (D3D11 or D3D12)",
+      "purpose": "draw Sonic, rings and the ring counter into BeamNG's finished frame",
+      "implementation": "on_present",
+      "verified": true
+    },
+    {
+      "id": "resize",
+      "side": "native",
+      "target": "IDXGISwapChain::ResizeBuffers",
+      "purpose": "drop our back-buffer view before BeamNG resizes",
+      "implementation": "on_resize_buffers",
+      "verified": false
+    },
+    {
+      "id": "walker_speed",
+      "side": "lua",
+      "target": "playerController.init (movementSpeedSprint) and setSpeedCoef",
+      "purpose": "stop BeamNG's walking controller from braking Sonic above a human sprint",
+      "implementation": "setWalkerSpeed",
+      "verified": true
+    },
+    {
+      "id": "menu_key",
+      "side": "lua",
+      "target": "input action sonicfrontiers_menu, key O (settings/inputmaps/keyboard_sonicfrontiers.json)",
+      "purpose": "open and close the Sonic Beam menu",
+      "implementation": "toggleMenu",
+      "verified": true
+    },
+    {
+      "id": "menu",
+      "side": "lua",
+      "target": "ui_imgui window drawn in onUpdate",
+      "purpose": "speed limit on/off, top speed, boost acceleration, speedometer; saved in settings/sonicfrontiers_sonic.json",
+      "implementation": "drawMenu",
+      "verified": true
+    },
+    {
+      "id": "glide",
+      "side": "lua",
+      "target": "obj:setNodeFrictionSlidingCoefs on the ball nodes; playerController gets no stick input so it locks the ball",
+      "purpose": "above glideKmh the ball slides instead of spinning hundreds of times a second (rolling losses, physics instability past ~550 km/h)",
+      "implementation": "setGlide",
+      "verified": true
+    },
+    {
+      "id": "air_drag",
+      "side": "lua",
+      "target": "obj:setTriangle on every triangle of the walking body (same nodes, pressure, collision)",
+      "purpose": "Sonic ignores the air; the body's drag would otherwise need forces that tear the soft body apart",
+      "implementation": "setAirDrag",
+      "verified": true
+    },
+    {
+      "id": "free_roam_only",
+      "side": "lua",
+      "target": "core_gamestate.state (freeroam / freeroam layout) and gameplay_missions_missionManager.getForegroundMissionId",
+      "purpose": "Sonic only takes over plain free roam; tutorials, Discover, career, scenarios and missions keep BeamNG's own walking body",
+      "implementation": "sonicAllowed",
+      "verified": false
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "sheet": "animations",
+  "about": "Sonic's real skeletal clips, read from the player's Sonic Frontiers (image/x64/raw/character/sonic.pac). Each row becomes one AnimationRow.",
+  "columns": {
+    "id": "identifier used by other sheets",
+    "clip": "PXD clip name inside sonic.pac",
+    "loop": "true when the clip repeats",
+    "rate": "speed = playback follows Sonic's speed / refKmh, eased into maxRate (no flailing at extreme speed); fixed = 1x",
+    "refKmh": "Sonic's speed (km/h) that plays the clip at 1x when rate is speed",
+    "minRate": "slowest playback multiplier",
+    "maxRate": "fastest playback multiplier",
+    "blendSeconds": "cross-fade time into this clip",
+    "verified": "clip decoded and seen playing in Forza"
+  },
+  "rows": [
+    {"id": "idle",        "clip": "chr_sonic@idle_loop.anm.pxd",    "loop": true,  "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.25, "verified": false},
+    {"id": "walk",        "clip": "chr_sonic@walk_loop.anm.pxd",    "loop": true,  "rate": "speed", "refKmh": 7, "minRate": 0.7, "maxRate": 1.7, "blendSeconds": 0.2,  "verified": false},
+    {"id": "run",         "clip": "chr_sonic@run_loop.anm.pxd",     "loop": true,  "rate": "speed", "refKmh": 38, "minRate": 0.9, "maxRate": 2.1, "blendSeconds": 0.2,  "verified": false},
+    {"id": "boost",       "clip": "chr_sonic@boost_loop.anm.pxd",   "loop": true,  "rate": "speed", "refKmh": 75, "minRate": 1.0, "maxRate": 2.6, "blendSeconds": 0.15, "verified": false},
+    {"id": "boost_left",  "clip": "chr_sonic@boost_l_loop.anm.pxd", "loop": true,  "rate": "speed", "refKmh": 75, "minRate": 1.0, "maxRate": 2.6, "blendSeconds": 0.2,  "verified": false},
+    {"id": "boost_right", "clip": "chr_sonic@boost_r_loop.anm.pxd", "loop": true,  "rate": "speed", "refKmh": 75, "minRate": 1.0, "maxRate": 2.6, "blendSeconds": 0.2,  "verified": false},
+    {"id": "drift_left",  "clip": "chr_sonic@drift_l_loop.anm.pxd", "loop": true,  "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.15, "verified": false},
+    {"id": "drift_right", "clip": "chr_sonic@drift_r_loop.anm.pxd", "loop": true,  "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.15, "verified": false},
+    {"id": "fall",        "clip": "chr_sonic@jump_d_loop.anm.pxd",  "loop": true,  "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.15, "verified": false},
+    {"id": "trick_up",    "clip": "chr_sonic@trick_u0.anm.pxd",     "loop": false, "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.1,  "verified": false},
+    {"id": "trick_left",  "clip": "chr_sonic@trick_l0.anm.pxd",     "loop": false, "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.1,  "verified": false},
+    {"id": "trick_right", "clip": "chr_sonic@trick_r0.anm.pxd",     "loop": false, "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.1,  "verified": false},
+    {"id": "land",        "clip": "chr_sonic@jump_e.anm.pxd",       "loop": false, "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.08, "verified": false}
+  ]
+}

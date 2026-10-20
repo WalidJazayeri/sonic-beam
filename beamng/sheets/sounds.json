@@ -1,0 +1,20 @@
+{
+  "sheet": "sounds",
+  "about": "Frontiers sound effects, decoded at start from the player's own ACB banks (CRI HCA, unencrypted). Each row becomes one SoundRow.",
+  "columns": {
+    "id": "identifier used by other sheets",
+    "bank": "ACB file under image/x64/raw/sound",
+    "cue": "cue name inside the bank",
+    "volume": "0..1 playback volume",
+    "maxSeconds": "longest the sound plays before fading out",
+    "verified": "decoded and heard in Forza"
+  },
+  "rows": [
+    {"id": "ring",  "bank": "se_rangers_obj_common.acb",           "cue": "obj_ring",     "volume": 0.55, "maxSeconds": 1.2, "verified": false},
+    {"id": "boost", "bank": "sonic_sound/se_rangers_player_sonic.acb", "cue": "sn_boost_run", "volume": 0.6,  "maxSeconds": 2.5, "verified": false},
+    {"id": "drift", "bank": "sonic_sound/se_rangers_player_sonic.acb", "cue": "sn_drift",     "volume": 0.5,  "maxSeconds": 1.6, "verified": false},
+    {"id": "jump",  "bank": "sonic_sound/se_rangers_player_sonic.acb", "cue": "sn_jump",      "volume": 0.6,  "maxSeconds": 0.9, "verified": false},
+    {"id": "trick", "bank": "sonic_sound/se_rangers_player_sonic.acb", "cue": "sn_airtrick",  "volume": 0.6,  "maxSeconds": 2.4, "verified": false},
+    {"id": "land",  "bank": "sonic_sound/se_rangers_player_sonic.acb", "cue": "sn_land_conc", "volume": 0.6,  "maxSeconds": 0.7, "verified": false}
+  ]
+}

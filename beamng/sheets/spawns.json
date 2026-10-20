@@ -1,0 +1,21 @@
+{
+  "sheet": "spawns",
+  "about": "Lines of real Frontiers rings placed on BeamNG's ground (Lua raycasts) ahead of Sonic, following his run. Each row becomes one SpawnRow; the test row is used only while Melty's test file exists.",
+  "columns": {
+    "id": "identifier",
+    "mode": "play = normal play, test = Melty test runs",
+    "everySeconds": "seconds between lines while moving",
+    "minKmh": "speed needed before a line appears",
+    "count": "rings per line",
+    "startMeters": "distance ahead of Sonic of the first ring",
+    "spacingMeters": "gap between rings",
+    "heightMeters": "ring centre above the ground",
+    "collectMeters": "pickup radius around Sonic",
+    "lifetimeSeconds": "a line disappears after this",
+    "verified": "seen in BeamNG"
+  },
+  "rows": [
+    {"id": "run_line",  "mode": "play", "everySeconds": 4.0, "minKmh": 10, "count": 8, "startMeters": 25, "spacingMeters": 5.0, "heightMeters": 0.9, "collectMeters": 1.8, "lifetimeSeconds": 25, "verified": false},
+    {"id": "test_line", "mode": "test", "everySeconds": 2.0, "minKmh": 0,  "count": 6, "startMeters": 4,  "spacingMeters": 3.0, "heightMeters": 0.9, "collectMeters": 2.2, "lifetimeSeconds": 20, "verified": false}
+  ]
+}

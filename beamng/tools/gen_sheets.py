@@ -1,0 +1,217 @@
+"""Preflight Sonic in BeamNG's design sheets and generate code from them.
+
+Outputs: beamng/src/gen/sheets.hpp (renderer) and
+beamng/mod/lua/common/sonicfrontiers/sheets.lua (mod script, both Lua VMs).
+Every row x column crossing must be filled, every reference must resolve and
+every implementation named in a sheet must exist in the C++ or Lua sources.
+"""
+import json
+import pathlib
+import re
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+SHEETS = ROOT / 'sheets'
+HPP = ROOT / 'src' / 'gen' / 'sheets.hpp'
+LUA = ROOT / 'mod' / 'lua' / 'common' / 'sonicfrontiers' / 'sheets.lua'
+
+ENUMS = {
+    ('animations', 'rate'): {'speed', 'fixed'},
+    ('states', 'air'): {'yes', 'no', 'any'},
+    ('states', 'boost'): {'yes', 'no', 'any'},
+    ('states', 'turn'): {'left', 'right', 'any'},
+    ('rings', 'trigger'): {'pickup', 'drift', 'air', 'boost'},
+    ('spawns', 'mode'): {'play', 'test'},
+    ('assets', 'kind'): {'model', 'skeleton'},
+    ('hooks', 'side'): {'lua', 'native'},
+    ('events', 'when'): {'landing'},
+}
+REFS = [
+    ('states', 'animation', 'animations', False),
+    ('states', 'enterSound', 'sounds', True),
+    ('rings', 'sound', 'sounds', False),
+    ('events', 'animation', 'animations', False),
+    ('events', 'sound', 'sounds', True),
+]
+NUMERIC = {
+    'animations': ['refKmh', 'minRate', 'maxRate', 'blendSeconds'],
+    'states': ['minKmh', 'maxKmh', 'priority', 'minAirSeconds'],
+    'rings': ['everySeconds', 'rings', 'cooldownSeconds', 'popup'],
+    'spawns': ['everySeconds', 'minKmh', 'count', 'startMeters', 'spacingMeters', 'heightMeters', 'collectMeters', 'lifetimeSeconds'],
+    'sounds': ['volume', 'maxSeconds'],
+    'events': ['minAirSeconds', 'holdSeconds'],
+    'tuning': ['value'], 'physics': ['value'], 'camera': ['value'],
+}
+
+
+def load():
+    return {d['sheet']: d for d in (json.loads(p.read_text(encoding='utf-8')) for p in sorted(SHEETS.glob('*.json')))}
+
+
+def sources():
+    text = ''
+    for folder, suffixes in ((ROOT / 'src', ('.cpp', '.hpp', '.h')), (ROOT / 'mod', ('.lua',)), (ROOT.parent / 'src' / 'frontiers', ('.hpp', '.cpp'))):
+        for path in folder.rglob('*'):
+            if path.suffix in suffixes and 'gen' not in path.parts and path.name != 'sheets.lua':
+                text += path.read_text(encoding='utf-8', errors='replace') + '\n'
+    return text
+
+
+def preflight(sheets):
+    problems, unverified = [], []
+    for name, sheet in sheets.items():
+        columns = list(sheet['columns'])
+        ids = set()
+        for i, row in enumerate(sheet['rows']):
+            label = f"{name}[{row.get('id', i)}]"
+            for column in columns:
+                value = row.get(column)
+                if value is None or (isinstance(value, str) and not value.strip()):
+                    problems.append(f'{label}.{column}: unfilled')
+            for column in row:
+                if column not in columns:
+                    problems.append(f'{label}.{column}: column not declared in the sheet')
+            if row.get('id') in ids:
+                problems.append(f'{label}: duplicate id')
+            ids.add(row.get('id'))
+            for (sheet_name, column), allowed in ENUMS.items():
+                if sheet_name == name and row.get(column) not in allowed:
+                    problems.append(f'{label}.{column}: {row.get(column)!r} not one of {sorted(allowed)}')
+            for column in NUMERIC.get(name, []):
+                v = row.get(column)
+                if not isinstance(v, (int, float)) or isinstance(v, bool):
+                    problems.append(f'{label}.{column}: must be a number')
+            if 'verified' in columns and row.get('verified') is not True:
+                unverified.append(label)
+    for source, column, target, allow_none in REFS:
+        targets = {r['id'] for r in sheets[target]['rows']}
+        for row in sheets[source]['rows']:
+            value = row.get(column)
+            if not (allow_none and value == 'none') and value not in targets:
+                problems.append(f"{source}[{row['id']}].{column}: {value!r} does not resolve in {target}")
+    modes = [r['mode'] for r in sheets['spawns']['rows']]
+    if modes.count('play') != 1 or modes.count('test') != 1:
+        problems.append('spawns: need exactly one play row and one test row')
+    text = sources()
+    for name in ('hooks', 'tests'):
+        for row in sheets[name]['rows']:
+            if not re.search(re.escape(row['implementation']) + r'\s*\(', text):
+                problems.append(f"{name}[{row['id']}].implementation: {row['implementation']}() not found")
+    for row in sheets['tests']['rows']:
+        if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,39}', row['id']):
+            problems.append(f"tests[{row['id']}]: not a valid Melty check name")
+    return problems, unverified
+
+
+def ident(text):
+    return re.sub(r'[^A-Za-z0-9_]', '_', text)
+
+
+def cstr(text):
+    return json.dumps(text)
+
+
+def f(value):
+    return f'{float(value)}f'
+
+
+def generate_hpp(s):
+    o = ['// Generated by beamng/tools/gen_sheets.py from beamng/sheets/*.json. Do not edit; change the sheet.',
+         '#pragma once', '#include <cstdint>', 'namespace sheets {', '']
+    for enum, key in (('Anim', 'animations'), ('Sound', 'sounds'), ('State', 'states'), ('RingRule', 'rings'), ('Test', 'tests')):
+        o.append(f'enum class {enum} : int {{ ' + ', '.join(ident(r['id']) for r in s[key]['rows']) + ', count };')
+    o.append('struct AnimationRow { const char *id; const char *clip; bool loop; bool speedRate; float refKmh, minRate, maxRate, blendSeconds; };')
+    o.append('inline constexpr AnimationRow animations[] = {')
+    for r in s['animations']['rows']:
+        o.append(f"    {{{cstr(r['id'])}, {cstr(r['clip'])}, {str(r['loop']).lower()}, {str(r['rate'] == 'speed').lower()}, {f(r['refKmh'])}, {f(r['minRate'])}, {f(r['maxRate'])}, {f(r['blendSeconds'])}}},")
+    o.append('};')
+    o.append('struct SoundRow { const char *id; const wchar_t *bank; const char *cue; float volume, maxSeconds; };')
+    o.append('inline constexpr SoundRow sounds[] = {')
+    for r in s['sounds']['rows']:
+        bank = r['bank'].replace('/', '\\\\')
+        o.append(f"    {{{cstr(r['id'])}, L\"{bank}\", {cstr(r['cue'])}, {f(r['volume'])}, {f(r['maxSeconds'])}}},")
+    o.append('};')
+    tri = {'yes': 1, 'no': 0, 'any': -1}
+    side = {'left': 1, 'right': 2, 'any': -1}
+    o.append('// air/boost: 1 yes, 0 no, -1 any. turn: 1 left, 2 right, -1 any.')
+    o.append('struct StateRow { const char *id; Anim animation; float minKmh, maxKmh; int air, boost, turn, priority; float minAirSeconds; int enterSound; };')
+    o.append('inline constexpr StateRow states[] = {')
+    for r in s['states']['rows']:
+        snd = -1 if r['enterSound'] == 'none' else f"int(Sound::{ident(r['enterSound'])})"
+        o.append(f"    {{{cstr(r['id'])}, Anim::{ident(r['animation'])}, {f(r['minKmh'])}, {f(r['maxKmh'])}, {tri[r['air']]}, {tri[r['boost']]}, {side[r['turn']]}, {int(r['priority'])}, {f(r['minAirSeconds'])}, {snd}}},")
+    o.append('};')
+    o.append('enum class Trigger : int { pickup, drift, air, boost };')
+    o.append('struct RingRuleRow { const char *id; Trigger trigger; float everySeconds; int rings; float cooldownSeconds; Sound sound; int popup; };')
+    o.append('inline constexpr RingRuleRow ringRules[] = {')
+    for r in s['rings']['rows']:
+        o.append(f"    {{{cstr(r['id'])}, Trigger::{r['trigger']}, {f(r['everySeconds'])}, {int(r['rings'])}, {f(r['cooldownSeconds'])}, Sound::{ident(r['sound'])}, {int(r['popup'])}}},")
+    o.append('};')
+    o.append('struct EventRow { const char *id; float minAirSeconds; Anim animation; int sound; float holdSeconds; };')
+    for r in s['events']['rows']:
+        snd = -1 if r['sound'] == 'none' else f"int(Sound::{ident(r['sound'])})"
+        o.append(f"inline constexpr EventRow {ident(r['id'])}Event = {{{cstr(r['id'])}, {f(r['minAirSeconds'])}, Anim::{ident(r['animation'])}, {snd}, {f(r['holdSeconds'])}}};")
+    o.append('struct AssetRow { const char *id; const wchar_t *archive; const char *entry; const char *kind; };')
+    for r in s['assets']['rows']:
+        archive = r['archive'].replace('/', '\\\\')
+        o.append(f"inline constexpr AssetRow {ident(r['id'])} = {{{cstr(r['id'])}, L\"{archive}\", {cstr(r['entry'])}, {cstr(r['kind'])}}};")
+    o.append('struct TestRow { const char *id; const char *when; };')
+    o.append('inline constexpr TestRow tests[] = {')
+    for r in s['tests']['rows']:
+        o.append(f"    {{{cstr(r['id'])}, {cstr(r['when'])}}},")
+    o.append('};')
+    o.append('namespace tuning {')
+    for r in s['tuning']['rows']:
+        o.append(f"inline constexpr float {r['id']} = {f(r['value'])}; // {r['unit']}: {r['purpose']}")
+    o.append('}')
+    o.append('} // namespace sheets')
+    return '\n'.join(o) + '\n'
+
+
+def lua_value(v):
+    if isinstance(v, bool):
+        return 'true' if v else 'false'
+    if isinstance(v, (int, float)):
+        return repr(float(v)) if isinstance(v, float) else str(v)
+    return json.dumps(v)
+
+
+def generate_lua(s):
+    o = ['-- Generated by beamng/tools/gen_sheets.py from beamng/sheets/*.json. Do not edit; change the sheet.', 'local M = {}']
+    for name in ('physics', 'camera'):
+        o.append(f'M.{name} = {{')
+        for r in s[name]['rows']:
+            o.append(f"  {r['id']} = {lua_value(r['value'])},")
+        o.append('}')
+    o.append('M.rings = {')
+    for r in s['rings']['rows']:
+        o.append(f"  {r['id']} = {{trigger = {lua_value(r['trigger'])}, everySeconds = {lua_value(r['everySeconds'])}, rings = {r['rings']}, cooldownSeconds = {lua_value(r['cooldownSeconds'])}, popup = {r['popup']}}},")
+    o.append('}')
+    o.append('M.spawns = {')
+    for r in s['spawns']['rows']:
+        fields = ', '.join(f"{k} = {lua_value(r[k])}" for k in ('everySeconds', 'minKmh', 'count', 'startMeters', 'spacingMeters', 'heightMeters', 'collectMeters', 'lifetimeSeconds'))
+        o.append(f"  {r['mode']} = {{{fields}}},")
+    o.append('}')
+    o.append('return M')
+    return '\n'.join(o) + '\n'
+
+
+def main():
+    sheets = load()
+    problems, unverified = preflight(sheets)
+    print(f"preflight: {sum(len(s['rows']) for s in sheets.values())} rows in {len(sheets)} sheets")
+    for p in problems:
+        print('  PROBLEM', p)
+    print(f'  unverified rows (checklist): {len(unverified)}')
+    if problems and not ('--dev' in sys.argv and all('not found' in p for p in problems)):
+        print('preflight failed: fix the sheets or code first')
+        return 1
+    HPP.parent.mkdir(parents=True, exist_ok=True)
+    LUA.parent.mkdir(parents=True, exist_ok=True)
+    HPP.write_text(generate_hpp(sheets), encoding='utf-8')
+    LUA.write_text(generate_lua(sheets), encoding='utf-8')
+    print('generated', HPP.relative_to(ROOT), 'and', LUA.relative_to(ROOT))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -1,0 +1,3 @@
+{
+"sonicfrontiers_menu" :{"cat":"gameplay", "order": 90, "ctx": "tlua", "onDown": "if sonicfrontiers_sonic then sonicfrontiers_sonic.toggleMenu() end", "title": "Sonic Beam menu", "desc": "Open or close the Sonic Beam menu: speed limit, top speed, boost acceleration, speedometer" }
+}

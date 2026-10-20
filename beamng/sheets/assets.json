@@ -1,0 +1,17 @@
+{
+  "sheet": "assets",
+  "about": "What the mod reads from the player's Sonic Frontiers folder at game start. Nothing is copied or shipped. Each row becomes one AssetRow.",
+  "columns": {
+    "id": "identifier",
+    "archive": "PAC archive relative to the Frontiers install folder",
+    "entry": "file inside the archive",
+    "kind": "model, skeleton",
+    "use": "what the mod does with it",
+    "verified": "parsed from the installed game and drawn in Forza"
+  },
+  "rows": [
+    {"id": "sonic_model",    "archive": "image/x64/raw/character/sonic.pac", "entry": "chr_sonic.model",     "kind": "model",    "use": "Sonic's skinned mesh, materials and textures", "verified": false},
+    {"id": "sonic_skeleton", "archive": "image/x64/raw/character/sonic.pac", "entry": "chr_sonic.skl.pxd",   "kind": "skeleton", "use": "bone order for every animation clip",          "verified": false},
+    {"id": "ring_model",     "archive": "image/x64/raw/CommonObject.pac",    "entry": "cmn_obj_ring.model",  "kind": "model",    "use": "ring pickups, ring bursts and the HUD icon",    "verified": false}
+  ]
+}

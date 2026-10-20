@@ -1,0 +1,16 @@
+{
+  "sheet": "events",
+  "about": "One-off moments that interrupt Sonic's state for a short time. Each row becomes one EventRow.",
+  "columns": {
+    "id": "identifier",
+    "when": "landing = car touches down after air",
+    "minAirSeconds": "airtime needed before the event fires",
+    "animation": "animations.id played once",
+    "sound": "sounds.id played, or none",
+    "holdSeconds": "how long the event keeps Sonic in its clip (cancelled by drift or new air)",
+    "verified": "seen in Forza"
+  },
+  "rows": [
+    {"id": "landing", "when": "landing", "minAirSeconds": 0.35, "animation": "land", "sound": "land", "holdSeconds": 0.45, "verified": false}
+  ]
+}

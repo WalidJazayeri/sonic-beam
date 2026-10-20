@@ -1,0 +1,20 @@
+LIBRARY version
+EXPORTS
+  GetFileVersionInfoA=sh_GetFileVersionInfoA
+  GetFileVersionInfoW=sh_GetFileVersionInfoW
+  GetFileVersionInfoSizeA=sh_GetFileVersionInfoSizeA
+  GetFileVersionInfoSizeW=sh_GetFileVersionInfoSizeW
+  GetFileVersionInfoExA=sh_GetFileVersionInfoExA
+  GetFileVersionInfoExW=sh_GetFileVersionInfoExW
+  GetFileVersionInfoSizeExA=sh_GetFileVersionInfoSizeExA
+  GetFileVersionInfoSizeExW=sh_GetFileVersionInfoSizeExW
+  VerFindFileA=sh_VerFindFileA
+  VerFindFileW=sh_VerFindFileW
+  VerInstallFileA=sh_VerInstallFileA
+  VerInstallFileW=sh_VerInstallFileW
+  VerLanguageNameA=sh_VerLanguageNameA
+  VerLanguageNameW=sh_VerLanguageNameW
+  VerQueryValueA=sh_VerQueryValueA
+  VerQueryValueW=sh_VerQueryValueW
+  sb_start
+

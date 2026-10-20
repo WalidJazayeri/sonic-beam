@@ -1,0 +1,5 @@
+.tools/
+build/
+src/gen/
+melty-project.json
+luac.out

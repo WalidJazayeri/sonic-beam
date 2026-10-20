@@ -1,0 +1,22 @@
+{
+  "sheet": "camera",
+  "about": "The third-person camera behind Sonic (a BeamNG global camera mode, sonicfrontiersChase). Each row becomes SHEETS.camera.<id> in Lua.",
+  "columns": {
+    "id": "constant name",
+    "value": "number",
+    "unit": "unit",
+    "purpose": "what it controls",
+    "verified": "checked in BeamNG"
+  },
+  "rows": [
+    {"id": "distance",       "value": 3.3,  "unit": "m",     "purpose": "distance behind Sonic",                                          "verified": false},
+    {"id": "boostDistance",  "value": 4.6,  "unit": "m",     "purpose": "distance behind Sonic at full boost",                            "verified": false},
+    {"id": "targetHeight",   "value": 0.8,  "unit": "m",     "purpose": "point on Sonic the camera looks at, above his feet",             "verified": false},
+    {"id": "pitchDegrees",   "value": 10,   "unit": "deg",   "purpose": "default downward look",                                          "verified": false},
+    {"id": "fovDegrees",     "value": 70,   "unit": "deg",   "purpose": "field of view",                                                  "verified": false},
+    {"id": "boostFovDegrees","value": 82,   "unit": "deg",   "purpose": "field of view at full boost",                                     "verified": false},
+    {"id": "followRate",     "value": 2.5,  "unit": "1/s",   "purpose": "how fast the camera swings behind Sonic while he runs",          "verified": false},
+    {"id": "mouseSpeed",     "value": 7,    "unit": "x",     "purpose": "mouse / stick look sensitivity (same scale as BeamNG's walking camera)", "verified": false},
+    {"id": "wallMargin",     "value": 0.3,  "unit": "m",     "purpose": "gap kept between the camera and walls",                          "verified": false}
+  ]
+}
