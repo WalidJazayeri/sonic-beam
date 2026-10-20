@@ -238,6 +238,10 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         s.state = best;
     }
     const V3 feet = v3(f->feet);
+    // Boost effects grow with Sonic's speed (Sonic Beam Lab): full at the reference speed (the O
+    // menu's top speed, or 500 km/h), down to (1 - amount) when he is slow
+    const float fx_ratio = std::max(0.0f, std::min(1.0f, s.speed_kmh / std::max(1.0f, f->fxRefKmh)));
+    const float fx_speed = 1 - std::max(0.0f, std::min(1.0f, f->fxSpeedAmount)) * (1 - fx_ratio);
     const int surface = std::max(0, std::min(6, int(f->surface)));
     audio::set_levels(f->soundDb, f->stepsDb);
     const V3 origin = feet + V3{0, 0, 0.6f};
@@ -261,7 +265,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         s.burst_at = now; s.burst_pos = origin;
         if (f->boostBoomKmh > 0 && s.speed_kmh >= f->boostBoomKmh) audio::play(Sound::sonic_boom);   // boom on a fast boost
         // Power Boost start: a crackle of bolts and glowing orbs drifting away (Frontiers' pow_boost_impact)
-        const float amount = f->lightning > 0 ? f->lightning : 0;
+        const float amount = (f->lightning > 0 ? f->lightning : 0) * fx_speed;
         for (int i = 0; i < int(10 * amount); ++i) {
             const float a = rnd() * 2 * kPi, r = 0.2f + 0.6f * rnd();
             s.bolts.push_back({origin + V3{std::cos(a) * r, std::sin(a) * r, (rnd() - 0.3f) * 0.9f}, {}, now + 0.03 * i, 0.14f, 0.7f + 0.6f * rnd(), rnd() * 6.28f, 2, int(rnd() * 16) & 15});
@@ -415,7 +419,8 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     // ---------------- Power Boost trail (Frontiers' locus streaks) with lightning arcs along it and
     // bolts crackling around Sonic, while boosting; it recedes behind him when the boost ends
     {
-        const float trail_len = f->trailLength > 0 ? f->trailLength : 1, intensity = std::max(0.0f, f->trailIntensity), lightning = std::max(0.0f, f->lightning);
+        const float trail_len = std::max(0.1f, (f->trailLength > 0 ? f->trailLength : 1) * fx_speed);
+        const float intensity = std::max(0.0f, f->trailIntensity) * fx_speed, lightning = std::max(0.0f, f->lightning) * fx_speed;
         const bool active = f->onFoot && f->boost && s.speed_kmh > 40;
         s.trail_on += ((active ? 1.0f : 0.0f) - s.trail_on) * std::min(1.0f, float(dt) * (active ? 10 : 3));
         const V3 chest = feet + V3{0, 0, 0.55f};
@@ -497,7 +502,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         const float rate = float(dt) / std::max(0.01f, lit ? tuning::auraFadeIn : tuning::auraFadeOut);
         s.aura = lit ? std::min(1.0f, s.aura + rate) : std::max(0.0f, s.aura - rate);
         scene.blur = s.blur;
-        scene.aura = s.aura * tuning::auraOpacity;
+        scene.aura = s.aura * tuning::auraOpacity * fx_speed;
         scene.aura_time = float(std::fmod(now, 1000.0));
         // streaks point at Sonic's chest on screen
         const V3 chest = feet + V3{0, 0, 0.6f};

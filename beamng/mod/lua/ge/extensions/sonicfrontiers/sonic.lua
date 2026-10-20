@@ -48,6 +48,8 @@ typedef struct {
   float trailLength;
   float trailIntensity;
   float lightning;
+  float fxSpeedAmount;
+  float fxRefKmh;
   int32_t ringCount;
   float rings[768];
 } SonicBeamPacket;
@@ -101,6 +103,7 @@ local settings = {
   boostBoom = true, boostBoomKmh = 200,        -- sonic boom on a boost started at least this fast
   shadowOpacity = 0.55, -- Sonic's shadow
   trailLength = 1, trailIntensity = 1, lightning = 1,   -- Power Boost trail and lightning
+  fxBySpeed = true, fxSpeedAmount = 0.75,              -- trail, lightning and aura grow with Sonic's speed
 }
 local menuOpen = false
 local menuWidgets = nil
@@ -141,7 +144,7 @@ end
 local LAB_MIN_DB, LAB_MAX_DB = -40, 12
 local labOpen, labWidgets = false, nil
 
-local function openLab()
+local function openLab(tab)
   labOpen = true
   labWidgets = {
     stepsDb = im.FloatPtr(settings.stepsDb),
@@ -155,9 +158,20 @@ local function openLab()
     trailLength = im.FloatPtr(settings.trailLength),
     trailIntensity = im.FloatPtr(settings.trailIntensity),
     lightning = im.FloatPtr(settings.lightning),
+    fxBySpeed = im.BoolPtr(settings.fxBySpeed),
+    fxSpeedAmount = im.FloatPtr(settings.fxSpeedAmount),
     open = im.BoolPtr(true),
     place = true,
+    tab = tab,          -- open on this tab once (developer tests)
   }
+end
+
+-- a lab tab; selected once when the lab was opened on it
+local function labTab(name)
+  local w = labWidgets
+  local flags = 0
+  if w.tab == name then flags = im.TabItemFlags_SetSelected; w.tab = nil end
+  return im.BeginTabItem(name, nil, flags)
 end
 
 local function dbText(db)
@@ -179,6 +193,12 @@ local function labSlider(label, ptr, key, low, high, text, default, defaultLabel
 end
 
 local function timesText(x) return string.format('x%.2f', x) end
+
+-- speed at which the boost effects are at full strength: the O menu's top speed, or 500 km/h
+-- when the speed limit is off
+local function fxReferenceKmh()
+  return settings.speedCapOn and math.max(50, settings.speedCapKmh) or 500
+end
 local function kmhText(x) return string.format('%.0f km/h', x) end
 
 -- a switch with the speed it works at (slider disabled while off)
@@ -200,27 +220,38 @@ local function drawLab()
     im.SetNextWindowSize(im.ImVec2(600 * im.uiscale[0], 0), im.Cond_Always)
   end
   im.Begin('Sonic Beam Lab', w.open, im.WindowFlags_NoCollapse)
-  im.Text('Sound')
-  im.Separator()
-  labSlider('Footsteps', w.stepsDb, 'stepsDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
-  labSlider('All Sonic sounds', w.soundDb, 'soundDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
-  labSlider('Wind', w.windDb, 'windDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
-  labBoom('Sonic boom on a fast boost', w.boostBoom, 'boostBoom', w.boostBoomKmh, 'boostBoomKmh', 50, 1000, 200)
-  im.Spacing()
-  im.Text('Shadow')
-  im.Separator()
-  labSlider('Shadow opacity', w.shadowOpacity, 'shadowOpacity', 0, 1, function(x) return string.format('%d %%', math.floor(x * 100 + 0.5)) end, 0.55, '55 %')
-  im.Spacing()
-  im.Text('Boost trail')
-  im.Separator()
-  labSlider('Trail length', w.trailLength, 'trailLength', 0.25, 3, timesText, 1, 'x1')
-  labSlider('Trail intensity', w.trailIntensity, 'trailIntensity', 0, 2, timesText, 1, 'x1')
-  labSlider('Lightning', w.lightning, 'lightning', 0, 2, timesText, 1, 'x1')
-  im.Spacing()
-  im.Text('Animation')
-  im.Separator()
-  labSlider('Animation speed', w.animSpeed, 'animSpeed', 0.5, 3, timesText, 1, 'x1')
-  labSlider('Animation speed limit', w.animLimit, 'animLimit', 0.5, 3, timesText, 1, 'x1')
+  -- one tab per theme; Close and save stays below whichever tab is open
+  if im.BeginTabBar('##sonicLabTabs') then
+    if labTab('Sound') then
+      labSlider('Footsteps', w.stepsDb, 'stepsDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
+      labSlider('All Sonic sounds', w.soundDb, 'soundDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
+      labSlider('Wind', w.windDb, 'windDb', LAB_MIN_DB, LAB_MAX_DB, dbText, 0, '0 dB')
+      labBoom('Sonic boom on a fast boost', w.boostBoom, 'boostBoom', w.boostBoomKmh, 'boostBoomKmh', 50, 1000, 200)
+      im.EndTabItem()
+    end
+    if labTab('Shadow') then
+      labSlider('Shadow opacity', w.shadowOpacity, 'shadowOpacity', 0, 1, function(x) return string.format('%d %%', math.floor(x * 100 + 0.5)) end, 0.55, '55 %')
+      im.EndTabItem()
+    end
+    if labTab('Boost') then
+      labSlider('Trail length', w.trailLength, 'trailLength', 0.25, 3, timesText, 1, 'x1')
+      labSlider('Trail intensity', w.trailIntensity, 'trailIntensity', 0, 2, timesText, 1, 'x1')
+      labSlider('Lightning', w.lightning, 'lightning', 0, 2, timesText, 1, 'x1')
+      im.Spacing()
+      if im.Checkbox('Effects follow Sonic\'s speed', w.fxBySpeed) then settings.fxBySpeed = w.fxBySpeed[0] end
+      im.TextUnformatted(string.format('  full effects at %.0f km/h (%s)', fxReferenceKmh(), settings.speedCapOn and 'top speed, O menu' or 'speed limit off'))
+      if not w.fxBySpeed[0] then im.BeginDisabled(true) end
+      labSlider('Speed influence', w.fxSpeedAmount, 'fxSpeedAmount', 0, 1, function(x) return string.format('%.2f (from %d %%)', x, math.floor((1 - x) * 100 + 0.5)) end, 0.75, '0.75')
+      if not w.fxBySpeed[0] then im.EndDisabled() end
+      im.EndTabItem()
+    end
+    if labTab('Animation') then
+      labSlider('Animation speed', w.animSpeed, 'animSpeed', 0.5, 3, timesText, 1, 'x1')
+      labSlider('Animation speed limit', w.animLimit, 'animLimit', 0.5, 3, timesText, 1, 'x1')
+      im.EndTabItem()
+    end
+    im.EndTabBar()
+  end
   im.Separator()
   if im.Button('Close and save') then w.open[0] = false end
   im.End()
@@ -598,6 +629,8 @@ sendFrame = function()
   frame.trailLength = settings.trailLength
   frame.trailIntensity = settings.trailIntensity
   frame.lightning = settings.lightning
+  frame.fxSpeedAmount = settings.fxBySpeed and settings.fxSpeedAmount or 0
+  frame.fxRefKmh = fxReferenceKmh()
   if groundPos then
     frame.hasGround = 1
     frame.groundPos[0], frame.groundPos[1], frame.groundPos[2] = groundPos.x, groundPos.y, groundPos.z
