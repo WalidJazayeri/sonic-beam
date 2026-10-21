@@ -596,7 +596,7 @@ void draw_frame(IDXGISwapChain *chain)
                 r.context->OMSetDepthStencilState(r.stencil_once, 0);
                 for (auto &m : r.sonic.meshes) r.context->DrawIndexed(m.index_count, m.first_index, INT(m.base_vertex));
             }
-            draw_mesh(r.sonic, scene.sonic_model, scene.view, scene.proj, 1, 0);
+            if (!scene.sonic_hidden) draw_mesh(r.sonic, scene.sonic_model, scene.view, scene.proj, 1, 0);
             drew_sonic = true;
             if (r.has_aura && scene.aura > 0.01f) {
                 if (scene.aura_dome && r.has_dome) draw_dome(scene);

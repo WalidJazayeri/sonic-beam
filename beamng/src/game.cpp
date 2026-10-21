@@ -178,6 +178,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     scene.blur = 0;
     scene.aura = 0;
     scene.ball_visible = false;
+    scene.sonic_hidden = false;
     const double dt = s.last_frame ? std::min(0.1, now - s.last_frame) : 0.016;
     s.last_frame = now;
     if (!d) {
@@ -390,6 +391,8 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
             sample(d->ball_clip, true, now, scene.ball_pose.data());
             scene.ball_alpha = s.ball_amount;
             scene.ball_visible = true;
+            // like Frontiers, only the ball shows once it has formed: his shoes and quills poked through it
+            scene.sonic_hidden = s.ball_amount > 0.5f;
         }
         // a soft, still, round blue glow (no texture and no spin: they made white dashes run round the ball)
         const float glow = std::max(0.0f, f->ballGlow) * s.ball_amount;

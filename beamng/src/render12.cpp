@@ -631,7 +631,7 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
         if (!scene.trail.empty()) draw_flat(f, draw::as_vertices(scene.trail), scene.view, scene.proj, 4, c.trail_texture, c.glow);
         if (!scene.arcs.empty()) draw_flat(f, draw::as_vertices(scene.arcs), scene.view, scene.proj, 4, c.arc_texture, c.glow);
         if (b) {
-            draw_mesh(f, c.sonic, b, scene.sonic_model, scene.view, scene.proj, 1, 0);
+            if (!scene.sonic_hidden) draw_mesh(f, c.sonic, b, scene.sonic_model, scene.view, scene.proj, 1, 0);
             drew_sonic = true;
             if (c.has_aura && scene.aura > 0.01f) {
                 if (scene.aura_dome && c.has_dome) draw_dome(f, scene);

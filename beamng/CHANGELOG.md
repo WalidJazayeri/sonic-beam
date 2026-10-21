@@ -5,6 +5,9 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.9.2
+- Saut en boule : une fois la boule formée, seule la coque de Frontiers est dessinée, comme dans le jeu ; le corps de Sonic roulé en boule est caché (ses semelles et ses piquants dépassaient de la coque en tournant). Il réapparaît dès qu'il se déroule ; l'ombre au sol reste.
+
 ## v0.9.1
 - Aura du boost couchée dans le sens de la course, comme sur les illustrations de Sonic : un bouclier arrondi juste devant son visage, qui l'englobe et s'étire vers l'arrière en traînées d'énergie qui s'effacent. Trois couches emboîtées, lumineuses à l'avant, de plus en plus transparentes vers l'arrière ; la texture d'énergie de Frontiers défile vers l'arrière, plus vite quand il accélère. L'aura suit la vraie direction du mouvement (pentes, sauts), pas seulement son regard, et s'allonge avec la vitesse.
 - Labo, onglet Aura : « Aura thickness » règle la grosseur, nouveau curseur « Aura length » (longueur vers l'arrière, ×1) ; case « Aura follows body shape » pour revenir à l'aura collée au corps (décochée par défaut).

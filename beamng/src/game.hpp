@@ -38,6 +38,7 @@ struct Scene {
     float sonic_model[16];         // model -> world
     std::vector<float> pose;       // nodes * 12 skinning matrices
     bool ball_visible = false;     // Frontiers' spin ball shell around Sonic curled up in a jump
+    bool sonic_hidden = false;     // his body is not drawn (inside the ball); his shadow still is
     float ball_model[16];          // model -> world
     std::vector<float> ball_pose;  // the shell's own skinning matrices
     float ball_alpha = 0;
