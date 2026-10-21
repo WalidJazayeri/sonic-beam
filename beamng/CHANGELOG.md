@@ -5,6 +5,12 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.7.0
+- Menu O, réglage « Sonic » à 3 choix (enregistré avec Close) :
+  - **Auto** (par défaut) : comme avant, Sonic en mode Libre seulement, en partant à pied ; la carte BeamNG.Earth compte maintenant comme du mode Libre (elle a sa propre disposition d'écran, `beamngEarth`) ;
+  - **Always** : Sonic remplace le piéton dans tous les modes (carrière, missions, scénarios…) ; hors mode Libre il ne sort jamais le joueur de sa voiture, Sonic arrive quand on descend (F) ;
+  - **Off** : le piéton normal de BeamNG partout.
+
 ## v0.6.2
 - Installation hors Melty : `install.bat` / `uninstall.bat` (avec `setup.ps1`) dans le paquet. L'installeur trouve BeamNG.drive et Sonic Frontiers dans les bibliothèques Steam (ou demande leurs dossiers), sauvegarde tout fichier qu'il remplacerait, installe le mod et note ce qu'il a fait dans `%LOCALAPPDATA%\SonicBeam\install.json` ; le désinstalleur retire tout et remet les fichiers sauvegardés.
 - Readme du paquet : installation, désinstallation et installation à la main. `Bin64/SonicBeam/VERSION` indique la version installée.

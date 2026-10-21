@@ -57,7 +57,7 @@ If you start BeamNG with a custom `-userpath`, put `sonicfrontiers_sonic` in `<u
 | O | Sonic Beam menu (top speed, Lab, Unstuck) |
 
 ## Good to know
-- Sonic takes over **Freeroam** only. Career, scenarios, missions and tutorials keep BeamNG's normal walking.
+- By default Sonic takes over **Freeroam** only (BeamNG.Earth's map included); career, scenarios, missions and tutorials keep BeamNG's normal walking. In the O menu, **Sonic: Always** makes him your walker in every game mode (he never pulls you out of a car there: get out with F), and **Sonic: Off** turns him off.
 - Sonic is drawn on top of BeamNG's picture, so BeamNG's own menus can appear behind him; he hides when a menu is open.
 
 ## How it works

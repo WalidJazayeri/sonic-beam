@@ -77,7 +77,7 @@ local testMode = false
 local autopilotSent = nil
 local settingsSent = nil
 local camPose = {fresh = false}   -- set by the sonicfrontiersChase camera for this frame
-local notAllowedFor = 0            -- seconds the game state has not been plain free roam
+local notAllowedFor = 0            -- seconds Sonic has not been allowed to start the map on foot
 local sonicBodyId = nil           -- walking body Sonic currently drives
 local safeSpots = {}              -- recent spots where Sonic stood upright, for the Unstuck button
 local unstuck                     -- defined below, called from the menu
@@ -90,6 +90,10 @@ local prevFeet = nil
 local SETTINGS_FILE = 'settings/sonicfrontiers_sonic.json'
 local im = ui_imgui
 local settings = {
+  -- where Sonic takes over the walker: 'auto' = plain free roam (and BeamNG.Earth) only, starting on
+  -- foot; 'always' = every game mode, without ever pulling the player out of a car outside free roam;
+  -- 'off' = never (BeamNG's own walker)
+  sonicMode = 'auto',
   speedCapOn = sheets.physics.speedCapOn == 1,
   speedCapKmh = sheets.physics.speedCapKmh,
   boostRampKmhPerSecond = sheets.physics.boostRampKmhPerSecond,
@@ -258,6 +262,12 @@ local function drawLab()
   if not w.open[0] then labOpen = false; saveSettings() end
 end
 
+local SONIC_MODES = {
+  {id = 'auto', label = 'Auto', about = 'Free roam only (BeamNG.Earth too), starting on foot.'},
+  {id = 'always', label = 'Always', about = 'Every game mode: Sonic whenever you are on foot (press F to get out of a car).'},
+  {id = 'off', label = 'Off', about = "BeamNG's own walker everywhere."},
+}
+
 local function drawMenu()
   if not menuOpen or not im then return end
   local w = menuWidgets
@@ -285,6 +295,15 @@ local function drawMenu()
   end
   im.PopItemWidth()
   if im.Checkbox('Show speed', w.showSpeed) then settings.showSpeed = w.showSpeed[0] end
+  im.Separator()
+  im.TextUnformatted('Sonic:')
+  for _, mode in ipairs(SONIC_MODES) do
+    im.SameLine()
+    if im.RadioButton1(mode.label, settings.sonicMode == mode.id) then settings.sonicMode = mode.id end
+  end
+  for _, mode in ipairs(SONIC_MODES) do
+    if settings.sonicMode == mode.id then im.TextUnformatted('  ' .. mode.about) end
+  end
   im.Separator()
   if im.Button('Unstuck: back to the last safe spot') then w.open[0] = false; unstuck() end
   if im.Button('Lab: settings we tune together') then w.open[0] = false; openLab() end
@@ -337,15 +356,23 @@ local function getUnicycle()
   return gameplay_walk.getCurrentUnicycle()
 end
 
--- Sonic only takes over BeamNG's plain free roam. Tutorials ("Discover", first drive), career,
--- scenarios and missions script the player themselves, so there the mod stays out of the way.
-local function sonicAllowed()
-  if testMode then return true end
+-- Plain free roam: no tutorial ("Discover", first drive), career, scenario or mission scripting the
+-- player. BeamNG.Earth's map is free roam with its own app layout ('beamngEarth').
+local FREE_ROAM_LAYOUTS = {freeroam = true, beamngEarth = true}
+local function plainFreeRoam()
   local gs = core_gamestate and core_gamestate.state or {}
-  if gs.state ~= 'freeroam' or gs.appLayout ~= 'freeroam' then return false end
+  if gs.state ~= 'freeroam' or not FREE_ROAM_LAYOUTS[gs.appLayout] then return false end
   local missions = gameplay_missions_missionManager
   if missions and missions.getForegroundMissionId and missions.getForegroundMissionId() then return false end
   return true
+end
+
+-- Whether Sonic drives the walker now (the player's choice in the O menu, 'Sonic: Auto/Always/Off')
+local function sonicAllowed()
+  if testMode then return true end
+  if settings.sonicMode == 'off' then return false end
+  if settings.sonicMode == 'always' then return true end
+  return plainFreeRoam()
 end
 
 local function ensureOnFoot()
@@ -513,7 +540,8 @@ local function onPreRender(dtReal, dtSim)
   local allowed = sonicAllowed()
   -- BeamNG settles its game state a moment after the map appears: only give up putting the player
   -- on foot once a non-free-roam state has held for 3 s (then never pull them out of a car later)
-  if allowed then
+  -- only plain free roam puts the player on foot: elsewhere ('Always') Sonic waits until they get out
+  if allowed and (testMode or plainFreeRoam()) then
     notAllowedFor = 0
     ensureOnFoot()
   elseif getPlayerVehicle(0) then

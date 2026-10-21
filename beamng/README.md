@@ -22,7 +22,7 @@ You are Sonic. Load any map in Freeroam and you start on foot as the actual Soni
 - **Sonic Frontiers** for PC, current version with all free updates (tested on the January 2026 PC build). Frontiers only has to be installed; it does not need to run.
 
 ## Good to know
-- Sonic takes over **Freeroam** only. Career, scenarios, missions and tutorials keep BeamNG's normal walking.
+- By default Sonic takes over **Freeroam** only (BeamNG.Earth's map included); career, scenarios, missions and tutorials keep BeamNG's normal walking. In the O menu, **Sonic: Always** makes him your walker in every game mode (he never pulls you out of a car there: get out with F), and **Sonic: Off** turns him off.
 - On the first launch, BeamNG warns about a **"Third-party library"** (`version.dll`, which draws Sonic). Click **Cancel** and it won't ask again.
 
 ## Install
