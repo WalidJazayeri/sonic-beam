@@ -512,8 +512,8 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
                 const V3 dir = i + 1 < path.size() ? path[i].pos - path[i + 1].pos : (i > 0 ? path[i - 1].pos - path[i].pos : fwd);
                 if (i > 0) along += length(path[i - 1].pos - path[i].pos);
                 const float age = float((now - path[i].born) / std::max(0.05, keep));
-                // fades in over its first metre (no hard edge at Sonic)
-                const float head = std::min(1.0f, along / 1.0f);
+                // fades in over its first metres (Sonic Beam Lab: Trail start fade; 0 = no fade)
+                const float head = f->trailFade > 0.001f ? std::min(1.0f, along / f->trailFade) : 1.0f;
                 const float fade = std::pow(std::max(0.0f, 1 - age), 1.5f) * alpha * s.trail_on * head * head;
                 // faces the camera, but turns flat (across the ground) where it points at the camera,
                 // instead of spinning on edge into a thin line of changing width
@@ -577,7 +577,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         const bool lit = boosting || (f->boost && s.speed_kmh > 30) || s.state == int(sheets::State::fast);
         const float rate = float(dt) / std::max(0.01f, lit ? tuning::auraFadeIn : tuning::auraFadeOut);
         s.aura = lit ? std::min(1.0f, s.aura + rate) : std::max(0.0f, s.aura - rate);
-        scene.blur = s.blur * std::max(0.0f, std::min(2.0f, f->blurStrength));
+        scene.blur = s.blur * std::max(0.0f, f->blurStrength);
         scene.aura = s.aura * tuning::auraOpacity * fx_speed;
         scene.aura *= 1 - s.ball_amount;   // the aura's bright rim streaked round the ball: the ball has its own glow
         scene.aura_time = float(std::fmod(now, 1000.0));

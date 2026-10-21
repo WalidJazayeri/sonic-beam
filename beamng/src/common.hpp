@@ -45,6 +45,7 @@ extern "C" struct SbFrame {
     int32_t hasGround;                 // groundPos/groundNormal are valid
     float trailLength, trailIntensity, lightning;   // Sonic Beam Lab: boost trail multipliers
     float fxSpeedAmount, fxRefKmh;     // Sonic Beam Lab: how much the boost effects follow speed (0: not), full at this speed
+    float trailFade;                   // Sonic Beam Lab: metres over which the trail fades in behind Sonic (0: no fade)
     int32_t jumpStyle;                 // Sonic Beam Lab, Jump: 0 ball the whole jump, 1 ball up then tricks, 2 ball, tricks on a direction
     float ballSpin, ballGlow;          // Sonic Beam Lab, Jump: ball turns per second, blue glow (0 none, 1 default)
     float blurStrength;                // Sonic Beam Lab: speed blur multiplier (1 default)

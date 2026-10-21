@@ -50,6 +50,7 @@ typedef struct {
   float lightning;
   float fxSpeedAmount;
   float fxRefKmh;
+  float trailFade;
   int32_t jumpStyle;
   float ballSpin;
   float ballGlow;
@@ -114,6 +115,7 @@ local settings = {
   boostBoom = true, boostBoomKmh = 200,        -- sonic boom on a boost started at least this fast
   shadowOpacity = 0.55, -- Sonic's shadow
   trailLength = 1, trailIntensity = 1, lightning = 1,   -- Power Boost trail and lightning
+  trailFade = 1,                                       -- metres over which the trail fades in behind Sonic
   fxBySpeed = true, fxSpeedAmount = 0.75,              -- trail, lightning and aura grow with Sonic's speed
   blurStrength = 1,                                    -- speed blur multiplier
   -- jump: 0 ball the whole jump, 1 ball going up then tricks, 2 ball with tricks on a direction
@@ -172,6 +174,7 @@ local function openLab(tab)
     trailLength = im.FloatPtr(settings.trailLength),
     trailIntensity = im.FloatPtr(settings.trailIntensity),
     lightning = im.FloatPtr(settings.lightning),
+    trailFade = im.FloatPtr(settings.trailFade),
     fxBySpeed = im.BoolPtr(settings.fxBySpeed),
     fxSpeedAmount = im.FloatPtr(settings.fxSpeedAmount),
     blurStrength = im.FloatPtr(settings.blurStrength),
@@ -197,7 +200,33 @@ local function dbText(db)
   return string.format('%+.1f dB', db)
 end
 
--- one lab setting: slider, its value written beside it, and a button back to the default
+-- a setting's value written beside its slider: a click turns it into a box to type any value,
+-- beyond the slider's range too; Enter (or a click elsewhere) keeps it
+local editKey, editBuf, editFrames = nil, nil, 0
+local function editableValue(key, ptr, text)
+  if editKey == key then
+    im.PushItemWidth(110 * im.uiscale[0])
+    if editFrames == 0 then im.SetKeyboardFocusHere(0) end
+    local entered = im.InputFloat('##edit' .. key, editBuf, 0, 0, '%.3f', im.InputTextFlags_EnterReturnsTrue + im.InputTextFlags_AutoSelectAll)
+    im.PopItemWidth()
+    editFrames = editFrames + 1
+    if entered or (editFrames > 3 and not im.IsItemActive()) then
+      editKey = nil
+      local v = editBuf[0]
+      if v == v and v > -1e9 and v < 1e9 then settings[key] = v; ptr[0] = v; return true end
+    end
+    return false
+  end
+  local shown = text(settings[key])
+  -- a selectable shows the text as is (% included) and lights up under the mouse
+  if im.Selectable1(shown .. '##value' .. key, false, 0, im.ImVec2(im.CalcTextSize(shown).x, 0)) then
+    editKey, editBuf, editFrames = key, im.FloatPtr(settings[key]), 0
+  end
+  if im.IsItemHovered() then im.SetTooltip('Click to type a value') end
+  return false
+end
+
+-- one lab setting: slider, its value (click to type it), and a button back to the default
 local function labSlider(label, ptr, key, low, high, text, default, defaultLabel)
   im.PushItemWidth(260 * im.uiscale[0])
   local changed = false
@@ -207,7 +236,7 @@ local function labSlider(label, ptr, key, low, high, text, default, defaultLabel
   end
   im.PopItemWidth()
   im.SameLine()
-  im.TextUnformatted(text(settings[key]))   -- not im.Text: it reads % as a format code
+  if editableValue(key, ptr, text) then changed = true end
   im.SameLine()
   if im.SmallButton(defaultLabel .. '##' .. key) then ptr[0] = default; settings[key] = default; changed = true end
   return changed
@@ -265,6 +294,7 @@ local function drawLab()
       labSlider('Trail length', w.trailLength, 'trailLength', 0.25, 3, timesText, 1, 'x1')
       labSlider('Trail intensity', w.trailIntensity, 'trailIntensity', 0, 2, timesText, 1, 'x1')
       labSlider('Lightning', w.lightning, 'lightning', 0, 2, timesText, 1, 'x1')
+      labSlider('Trail start fade', w.trailFade, 'trailFade', 0, 4, function(x) return string.format('%.2f m', x) end, 1, '1 m')
       im.Spacing()
       if im.Checkbox('Effects follow Sonic\'s speed', w.fxBySpeed) then settings.fxBySpeed = w.fxBySpeed[0] end
       im.TextUnformatted(string.format('  full effects at %.0f km/h (%s)', fxReferenceKmh(), settings.speedCapOn and 'top speed, O menu' or 'speed limit off'))
@@ -327,9 +357,11 @@ local function drawMenu()
     settings.speedCapKmh = w.capKmh[0]; settingsSent = nil
   end
   if not w.capOn[0] then im.EndDisabled() end
-  if im.SliderFloat('Boost acceleration (km/h per s)', w.ramp, 10, 500, '%.0f', nil) then
+  if im.SliderFloat('Boost acceleration (km/h per s)', w.ramp, 10, 500, '', nil) then
     settings.boostRampKmhPerSecond = clamp(w.ramp[0], 10, 500); settingsSent = nil
   end
+  im.SameLine()
+  if editableValue('boostRampKmhPerSecond', w.ramp, function(x) return string.format('%.0f', x) end) then settingsSent = nil end
   im.PopItemWidth()
   if im.Checkbox('Show speed', w.showSpeed) then settings.showSpeed = w.showSpeed[0] end
   im.Separator()
@@ -699,6 +731,7 @@ sendFrame = function()
   frame.lightning = settings.lightning
   frame.fxSpeedAmount = settings.fxBySpeed and settings.fxSpeedAmount or 0
   frame.fxRefKmh = fxReferenceKmh()
+  frame.trailFade = settings.trailFade
   frame.jumpStyle = settings.jumpStyle
   frame.ballSpin = settings.ballSpin
   frame.ballGlow = settings.ballGlow
@@ -773,6 +806,7 @@ M.onDrawDebug = onDrawDebug
 M.toggleMenu = toggleMenu
 M.unstuck = unstuck
 M.openLab = openLab
+M.editValue = function(key) if settings[key] ~= nil then editKey, editBuf, editFrames = key, im.FloatPtr(settings[key]), 0 end end   -- developer tests
 M.isMenuOpen = function() return menuOpen end
 M.onClientStartMission = onClientStartMission
 M.onClientEndMission = onClientEndMission

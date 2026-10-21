@@ -30,7 +30,7 @@ struct Packet {
     float stepsDb, soundDb, animSpeed, animLimit, windDb, boostBoomKmh;
     float toSun[3], groundPos[3], groundNormal[3], shadowOpacity;
     int32_t hasGround;
-    float trailLength, trailIntensity, lightning, fxSpeedAmount, fxRefKmh;
+    float trailLength, trailIntensity, lightning, fxSpeedAmount, fxRefKmh, trailFade;
     int32_t jumpStyle;
     float ballSpin, ballGlow, blurStrength;
     int32_t airInput;
@@ -76,7 +76,7 @@ DWORD WINAPI listener(void *)
         f.shadowOpacity = p.shadowOpacity; f.hasGround = p.hasGround;
         f.trailLength = p.trailLength; f.trailIntensity = p.trailIntensity; f.lightning = p.lightning;
         f.fxSpeedAmount = p.fxSpeedAmount; f.fxRefKmh = p.fxRefKmh;
-        f.jumpStyle = p.jumpStyle; f.ballSpin = p.ballSpin; f.ballGlow = p.ballGlow; f.blurStrength = p.blurStrength; f.airInput = p.airInput;
+        f.trailFade = p.trailFade; f.jumpStyle = p.jumpStyle; f.ballSpin = p.ballSpin; f.ballGlow = p.ballGlow; f.blurStrength = p.blurStrength; f.airInput = p.airInput;
         f.ringCount = count; f.ringPos = rings.data();
         sb_frame(&f);
         if (first) { first = false; mod::log("link: first frame from the Sonic Beam script"); hook_graphics(); }

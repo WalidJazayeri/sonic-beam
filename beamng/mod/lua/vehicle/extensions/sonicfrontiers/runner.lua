@@ -365,7 +365,7 @@ M.setEnabled = function(on)
 end
 M.setSpeedSettings = function(capOn, capKmh, rampKmhPerSecond, jumpHeight)
   speedCapOn = capOn and true or false
-  jumpSpeed = P.jumpSpeed * math.sqrt(clamp(jumpHeight or 1, 0.25, 4))
+  jumpSpeed = P.jumpSpeed * math.sqrt(math.max(0.01, jumpHeight or 1))   -- typed values may go past the lab's slider
   speedCapMs = math.max(10, capKmh or P.speedCapKmh) / 3.6
   boostRamp = math.max(1, rampKmhPerSecond or P.boostRampKmhPerSecond) / 3.6
   log('I', 'sonicfrontiers', string.format('speed: limit %s at %.0f km/h, boost +%.0f km/h per second, jump %.1f m/s',

@@ -11,7 +11,7 @@ You are Sonic. Load any map in Freeroam and you start on foot as the actual Soni
 - **His sounds**: footsteps that match the ground (asphalt, dirt, grass, sand, snow, water, metal), jump, boost, landing, brake, speed wind, a sonic boom on fast boosts.
 - **A real shadow** that follows his silhouette and BeamNG's sun.
 - **Frontiers' jump ball**: Sonic curls up into a spinning blue ball when he jumps, in Frontiers' own spin shell. Choose in the Lab whether he stays a ball, does tricks after the top of the jump, or does a trick when you hold a direction in the air; tune the spin speed, the glow and the jump height.
-- **Sonic Beam Lab**: an in-game panel (O menu, then Lab) to tune volumes, shadow, trail, lightning, speed blur, jump ball and animation speed. Saved between sessions.
+- **Sonic Beam Lab**: an in-game panel (O menu, then Lab) to tune volumes, shadow, trail, lightning, speed blur, jump ball and animation speed. Click any value to type it, even past the slider's range. Saved between sessions.
 - Stuck in a fence after a 600 km/h crash? **Unstuck** in the O menu puts you back on your feet.
 
 ## Controls
