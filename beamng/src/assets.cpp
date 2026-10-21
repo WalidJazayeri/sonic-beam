@@ -3,6 +3,7 @@
 #include "common.hpp"
 #include "testmode.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <memory>
@@ -78,6 +79,41 @@ bool load_all()
         if (!data.trail_fx) mod::log("assets: boost trail unavailable (%s) - continuing without it", error.c_str());
         if (ok) mod::log("assets: boost aura %zu vertices, effect textures %ux%u", data.aura.vertices.size(), data.aura_texture.width, data.aura_texture.height);
         else mod::log("assets: boost effect unavailable (%s) - continuing without it", error.c_str());
+    }
+    // Boost aura shape: a bullet lying along the run, built here (no game file). A round nose (unit
+    // hemisphere, tip at z = 1) then a tail flaring slightly back to z = -1 (the renderer stretches it).
+    // v runs from 0 at the tip to 2 at the tail's end: the aura fades along it and its energy streams back.
+    {
+        const int around = 48, nose = 12, tail = 12, rings = nose + tail;
+        frontiers::Model &m = data.dome;
+        for (int i = 0; i <= rings; ++i) {
+            float radius, z, nz, v;
+            if (i <= nose) {
+                const float phi = 1.5707963f * (1 - float(i) / nose);    // pi/2 at the tip, 0 at the nose's base
+                radius = std::cos(phi); z = std::sin(phi); nz = z; v = 0.5f * (1 - z);
+            } else {
+                const float t = float(i - nose) / tail;
+                radius = 1 + 0.15f * t; z = -t; nz = 0; v = 0.5f + 1.5f * t;
+            }
+            for (int j = 0; j <= around; ++j) {
+                const float th = 6.2831853f * float(j) / around;
+                frontiers::Vertex vx{};
+                vx.pos[0] = radius * std::cos(th); vx.pos[1] = radius * std::sin(th); vx.pos[2] = z;
+                const float nr = i <= nose ? radius : 1.0f;
+                vx.normal[0] = nr * std::cos(th); vx.normal[1] = nr * std::sin(th); vx.normal[2] = nz;
+                vx.uv[0] = 2.0f * float(j) / around; vx.uv[1] = v;
+                vx.joints[0] = 0; vx.weights[0] = 255;
+                m.vertices.push_back(vx);
+            }
+        }
+        for (int i = 0; i < rings; ++i)
+            for (int j = 0; j < around; ++j) {
+                const uint16_t a = uint16_t(i * (around + 1) + j), b = uint16_t(a + around + 1);
+                for (uint16_t k : {a, b, uint16_t(a + 1), uint16_t(a + 1), b, uint16_t(b + 1)}) m.indices.push_back(k);
+            }
+        frontiers::Mesh mesh;
+        mesh.index_count = uint32_t(m.indices.size());
+        m.meshes.push_back(mesh);
     }
     // Jump ball: Frontiers' spin ball shell (its own small skeleton and loop) around Sonic curled up
     {

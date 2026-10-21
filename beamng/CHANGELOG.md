@@ -5,6 +5,10 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.9.1
+- Aura du boost couchée dans le sens de la course, comme sur les illustrations de Sonic : un bouclier arrondi juste devant son visage, qui l'englobe et s'étire vers l'arrière en traînées d'énergie qui s'effacent. Trois couches emboîtées, lumineuses à l'avant, de plus en plus transparentes vers l'arrière ; la texture d'énergie de Frontiers défile vers l'arrière, plus vite quand il accélère. L'aura suit la vraie direction du mouvement (pentes, sauts), pas seulement son regard, et s'allonge avec la vitesse.
+- Labo, onglet Aura : « Aura thickness » règle la grosseur, nouveau curseur « Aura length » (longueur vers l'arrière, ×1) ; case « Aura follows body shape » pour revenir à l'aura collée au corps (décochée par défaut).
+
 ## v0.9.0
 - Aura du boost plus bleue : un bleu électrique profond au lieu du bleu ciel qui tournait au blanc sur les zones claires ; les traînées d'énergie de la texture restent bleues.
 - Éclairs sur le corps : quand l'aura est allumée (boost, grande vitesse), de petits arcs électriques (texture d'éclair de Frontiers) crépitent sur les bras, les jambes et les piquants de Sonic. Chacun est accroché à un os, donc il suit ses mouvements ; il y en a plus quand il va vite.

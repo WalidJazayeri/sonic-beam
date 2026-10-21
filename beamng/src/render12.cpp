@@ -71,8 +71,8 @@ struct Context {
     ID3D12DescriptorHeap *srv = nullptr;
     UINT srv_stride = 0;
     int font_texture = 0, white_texture = 0;
-    GpuMesh sonic, ring, aura_mesh, ball;
-    bool has_aura = false, has_ball = false;
+    GpuMesh sonic, ring, aura_mesh, ball, dome;
+    bool has_aura = false, has_ball = false, has_dome = false;
     int aura_texture = -1, glow_texture = -1, wave_texture = -1;
     int trail_texture = -1, bolt_texture = -1, arc_texture = -1, orb_texture = -1;
     int copy_slot = -1;                           // descriptor of the frame copy the speed blur reads
@@ -324,6 +324,7 @@ bool upload_assets(const assets::Data &d)
     if (!mesh(d.sonic, c.sonic) || !mesh(d.ring, c.ring)) return false;
     c.has_aura = d.boost_fx && mesh(d.aura, c.aura_mesh);
     c.has_ball = d.ball_fx && mesh(d.ball, c.ball);
+    c.has_dome = mesh(d.dome, c.dome);
     for (size_t i = 0; i < sources.size(); ++i) {
         const Source &s = sources[i];
         D3D12_RESOURCE_DESC td{};
@@ -421,6 +422,32 @@ void draw_mesh(Frame &f, const GpuMesh &g, D3D12_GPU_VIRTUAL_ADDRESS bones, cons
         c.list->SetGraphicsRootConstantBufferView(0, cb);
         c.list->SetGraphicsRootDescriptorTable(2, srv_handle(m.texture >= 0 ? g.texture_base + m.texture : c.white_texture));
         c.list->DrawIndexedInstanced(m.index_count, 1, m.first_index, INT(m.base_vertex), 0);
+    }
+}
+
+// Boost aura shape: three nested bullets lying along the run, bright at the nose, fading back.
+void draw_dome(Frame &f, const game::Scene &scene)
+{
+    static const std::vector<float> identity = draw::identity_bones();
+    const auto bones = push(f, identity.data(), identity.size() * 4);
+    if (!bones) return;
+    c.list->SetPipelineState(c.aura);
+    c.list->SetGraphicsRootConstantBufferView(1, bones);
+    c.list->SetGraphicsRootDescriptorTable(2, srv_handle(c.aura_texture));
+    c.list->IASetVertexBuffers(0, 1, &c.dome.vbv);
+    c.list->IASetIndexBuffer(&c.dome.ibv);
+    for (int layer = 0; layer < 3; ++layer) {
+        float model[16], mv[16];
+        draw::layer_scale(scene.dome_model, draw::kDomeScale[layer], model);
+        draw::mul(model, scene.view, mv);
+        draw::DrawConstants dc{};
+        std::memcpy(dc.model_view, mv, 64); std::memcpy(dc.proj, scene.proj, 64);
+        dc.tint[0] = 0.04f; dc.tint[1] = 0.28f; dc.tint[2] = 1.0f; dc.tint[3] = scene.aura * draw::kDomeAlpha[layer];
+        dc.params[1] = scene.aura_time + layer * 0.37f; dc.params[2] = scene.dome_tail * (1 + 0.12f * layer); dc.params[3] = float(c.color_mode);
+        const auto cb = push(f, &dc, sizeof(dc));
+        if (!cb) return;
+        c.list->SetGraphicsRootConstantBufferView(0, cb);
+        for (auto &m : c.dome.meshes) c.list->DrawIndexedInstanced(m.index_count, 1, m.first_index, INT(m.base_vertex), 0);
     }
 }
 
@@ -606,7 +633,10 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
         if (b) {
             draw_mesh(f, c.sonic, b, scene.sonic_model, scene.view, scene.proj, 1, 0);
             drew_sonic = true;
-            if (c.has_aura && scene.aura > 0.01f) { draw_aura(f, b, scene, 0); draw_aura(f, b, scene, 1); }
+            if (c.has_aura && scene.aura > 0.01f) {
+                if (scene.aura_dome && c.has_dome) draw_dome(f, scene);
+                else { draw_aura(f, b, scene, 0); draw_aura(f, b, scene, 1); }
+            }
         }
         // Frontiers' spin ball shell around Sonic curled up in a jump (its own bones)
         if (c.has_ball && scene.ball_visible && !scene.ball_pose.empty()) {

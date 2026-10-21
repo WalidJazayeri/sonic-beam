@@ -55,6 +55,9 @@ struct Scene {
     float aura = 0;                // 0..1 aura brightness (drawn on Sonic's pose)
     float aura_time = 0;           // seconds, scrolls the aura pattern
     float aura_thickness = 1;      // Sonic Beam Lab: how far the aura stands off the body (x)
+    bool aura_dome = false;        // the boost aura's own shape (lying along the run) instead of the one on his body
+    float dome_model[16];          // unit aura shape -> world
+    float dome_tail = 1;           // its tail's length, in units of the nose
     std::vector<Sprite> sprites;
     // Power Boost trail: world-space triangles, 9 floats per vertex (position, uv, rgba)
     std::vector<float> trail, arcs, beam;

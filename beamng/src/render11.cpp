@@ -67,8 +67,8 @@ struct Renderer {
     ID3D11RasterizerState *raster = nullptr;
     std::vector<ID3D11ShaderResourceView *> textures;
     int font_texture = 0, white_texture = 0;
-    GpuMesh sonic, ring, aura, ball;
-    bool has_aura = false, has_ball = false;
+    GpuMesh sonic, ring, aura, ball, dome;
+    bool has_aura = false, has_ball = false, has_dome = false;
     int aura_texture = -1, glow_texture = -1, wave_texture = -1;
     int trail_texture = -1, bolt_texture = -1, arc_texture = -1, orb_texture = -1;
     ID3D11Texture2D *copy = nullptr;               // copy of BeamNG's frame for the speed blur
@@ -232,6 +232,7 @@ bool upload_assets(const assets::Data &d)
 {
     if (!upload_mesh(d.sonic, r.sonic) || !upload_mesh(d.ring, r.ring)) return false;
     r.has_ball = d.ball_fx && upload_mesh(d.ball, r.ball);
+    r.has_dome = upload_mesh(d.dome, r.dome);
     if (d.boost_fx && upload_mesh(d.aura, r.aura)) {
         const int base = int(r.textures.size());
         r.textures.push_back(texture_view(d.aura_texture));
@@ -409,6 +410,35 @@ void bind_constants(const DrawConstants &dc)
     }
 }
 
+// Boost aura shape: three nested bullets lying along the run, bright at the nose, fading back.
+void draw_dome(const game::Scene &scene)
+{
+    static const std::vector<float> identity = draw::identity_bones();
+    bind_bones(identity.data(), identity.size());
+    const float factor[4] = {};
+    r.context->OMSetBlendState(r.blend_add, factor, 0xffffffff);
+    r.context->OMSetDepthStencilState(r.depth_test, 0);
+    const UINT stride = sizeof(frontiers::Vertex), offset = 0;
+    r.context->IASetVertexBuffers(0, 1, &r.dome.vb, &stride, &offset);
+    r.context->IASetIndexBuffer(r.dome.ib, DXGI_FORMAT_R16_UINT, 0);
+    r.context->IASetInputLayout(r.layout_mesh);
+    r.context->VSSetShader(r.vs_aura, nullptr, 0);
+    r.context->PSSetShader(r.ps_aura, nullptr, 0);
+    r.context->PSSetShaderResources(0, 1, &r.textures[r.aura_texture]);
+    for (int layer = 0; layer < 3; ++layer) {
+        float model[16], mv[16];
+        draw::layer_scale(scene.dome_model, draw::kDomeScale[layer], model);
+        draw::mul(model, scene.view, mv);
+        DrawConstants dc{};
+        std::memcpy(dc.model_view, mv, 64); std::memcpy(dc.proj, scene.proj, 64);
+        dc.tint[0] = 0.04f; dc.tint[1] = 0.28f; dc.tint[2] = 1.0f; dc.tint[3] = scene.aura * draw::kDomeAlpha[layer];
+        dc.params[1] = scene.aura_time + layer * 0.37f; dc.params[2] = scene.dome_tail * (1 + 0.12f * layer); dc.params[3] = float(r.color_mode);
+        bind_constants(dc);
+        for (auto &m : r.dome.meshes) r.context->DrawIndexed(m.index_count, m.first_index, INT(m.base_vertex));
+    }
+    r.context->OMSetBlendState(r.blend, factor, 0xffffffff);
+}
+
 // Speed blur: copy BeamNG's finished frame, then draw it back streaked toward Sonic.
 void draw_speed_blur(const game::Scene &scene)
 {
@@ -568,7 +598,10 @@ void draw_frame(IDXGISwapChain *chain)
             }
             draw_mesh(r.sonic, scene.sonic_model, scene.view, scene.proj, 1, 0);
             drew_sonic = true;
-            if (r.has_aura && scene.aura > 0.01f) { draw_aura(scene, 0); draw_aura(scene, 1); }
+            if (r.has_aura && scene.aura > 0.01f) {
+                if (scene.aura_dome && r.has_dome) draw_dome(scene);
+                else { draw_aura(scene, 0); draw_aura(scene, 1); }
+            }
             // Frontiers' spin ball shell around Sonic curled up in a jump (its own bones)
             if (r.has_ball && scene.ball_visible && !scene.ball_pose.empty()) {
                 bind_bones(scene.ball_pose.data(), scene.ball_pose.size());

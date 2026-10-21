@@ -19,6 +19,7 @@ struct Data {
     // Frontiers' boost effect (optional: Sonic still runs without it)
     bool boost_fx = false;
     frontiers::Model aura;                  // aura shell on Sonic's own skeleton
+    frontiers::Model dome;                  // the boost aura's shape: a bullet along +z, nose tip at z = 1, tail to z = -1 (built here)
     frontiers::Texture aura_texture, glow_texture, wave_texture;
     // Power Boost trail and lightning (optional too)
     bool trail_fx = false;

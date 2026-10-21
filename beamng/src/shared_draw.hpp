@@ -73,11 +73,13 @@ float4 psFlat(FOut i) : SV_Target {
 float4 psShadow(PSIn i) : SV_Target { return float4(0, 0, 0, tint.a); }
 // Boost aura, after Frontiers' SonicAura material: Sonic's aura shell on his own pose, brighter
 // toward the silhouette (falloff) with the aura texture streaming over it. Drawn additive.
-// params.x: push along the normal (model units), params.y: time; tint: colour and brightness.
+// params.x: push along the normal (model units), params.y: time, params.z: tail length (aura shape only);
+// tint: colour and brightness.
 PSIn vsAura(VSIn i) {
     float4 p = float4(i.p, 1); float3 sp = 0, sn = 0;
     [unroll] for (int k = 0; k < 4; k++) { float w = i.w[k]; if (w > 0) { sp += w * skinP(p, i.j[k]); sn += w * skinN(i.n, i.j[k]); } }
     sp += normalize(sn + 1e-6) * params.x;
+    if (params.z > 0 && sp.z < 0) sp.z *= params.z;   // boost aura shape: the tail's length
     float4 vp = mul(float4(sp, 1), modelView);
     PSIn o; o.v = vp.xyz; o.pos = mul(vp, proj); o.n = mul(float4(sn, 0), modelView).xyz; o.uv = i.uv; return o;
 }
@@ -89,6 +91,7 @@ float4 psAura(PSIn i) : SV_Target {
     float4 a2 = tex.Sample(wrapS, i.uv * 1.7 + float2(params.y * 0.4, -params.y * 2.1));
     float energy = max(a1.r, max(a1.g, a1.b)) * a1.a * 0.6 + max(a2.r, max(a2.g, a2.b)) * a2.a * 0.6;
     float a = saturate(falloff * (0.25 + energy)) * tint.a;
+    if (params.z > 0) a *= 1 - smoothstep(0.35, 2.0, i.uv.y);   // boost aura shape: bright nose, the tail fades away
     return float4(output(tint.rgb * (0.75 + 0.45 * energy)), a);   // streaks stay blue
 }
 // Speed blur (Frontiers' boost): the finished BeamNG frame streaks toward Sonic. tint.xy: centre
@@ -123,6 +126,16 @@ inline void mul(const float *a, const float *b, float *o)
         t[i * 4 + j] = s;
     }
     std::memcpy(o, t, sizeof(t));
+}
+
+// arched aura: three nested domes (scale of each, brightness of each)
+inline constexpr float kDomeScale[3] = {1.0f, 1.13f, 1.27f};
+inline constexpr float kDomeAlpha[3] = {0.8f, 0.5f, 0.3f};
+// the unit dome scaled about its base (row vectors: scale first, then the dome's own placement)
+inline void layer_scale(const float *model, float s, float *out)
+{
+    const float sm[16] = {s, 0, 0, 0, 0, s, 0, 0, 0, 0, s, 0, 0, 0, 0, 1};
+    mul(sm, model, out);
 }
 
 inline std::vector<float> identity_bones()

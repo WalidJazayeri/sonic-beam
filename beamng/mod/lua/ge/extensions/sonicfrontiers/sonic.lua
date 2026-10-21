@@ -53,6 +53,8 @@ typedef struct {
   float auraThickness;
   float auraIntensity;
   float auraLightning;
+  int32_t auraBody;
+  float auraLength;
   float trailFade;
   int32_t jumpStyle;
   float ballSpin;
@@ -120,6 +122,8 @@ local settings = {
   trailLength = 1, trailIntensity = 1, lightning = 1,   -- Power Boost trail and lightning
   trailFade = 1,                                       -- metres over which the trail fades in behind Sonic
   auraThickness = 1, auraIntensity = 1, auraLightning = 1,   -- boost aura on Sonic's body, and its lightning
+  auraBodyShape = false,                                      -- false: lying along the run, round in front; true: hugs his body
+  auraLength = 1,                                             -- how far the aura streams back behind him
   fxBySpeed = true, fxSpeedAmount = 0.75,              -- trail, lightning and aura grow with Sonic's speed
   blurStrength = 1,                                    -- speed blur multiplier
   -- jump: 0 ball the whole jump, 1 ball going up then tricks, 2 ball with tricks on a direction
@@ -182,6 +186,8 @@ local function openLab(tab)
     auraThickness = im.FloatPtr(settings.auraThickness),
     auraIntensity = im.FloatPtr(settings.auraIntensity),
     auraLightning = im.FloatPtr(settings.auraLightning),
+    auraBodyShape = im.BoolPtr(settings.auraBodyShape),
+    auraLength = im.FloatPtr(settings.auraLength),
     fxBySpeed = im.BoolPtr(settings.fxBySpeed),
     fxSpeedAmount = im.FloatPtr(settings.fxSpeedAmount),
     blurStrength = im.FloatPtr(settings.blurStrength),
@@ -314,7 +320,9 @@ local function drawLab()
     end
     if labTab('Aura') then
       im.TextUnformatted('The blue aura on Sonic while he boosts or runs fast:')
+      if im.Checkbox('Aura follows body shape (otherwise it streams along the run)', w.auraBodyShape) then settings.auraBodyShape = w.auraBodyShape[0] end
       labSlider('Aura thickness', w.auraThickness, 'auraThickness', 0, 3, timesText, 1, 'x1')
+      labSlider('Aura length', w.auraLength, 'auraLength', 0, 3, timesText, 1, 'x1')
       labSlider('Aura intensity', w.auraIntensity, 'auraIntensity', 0, 2, timesText, 1, 'x1')
       labSlider('Aura lightning', w.auraLightning, 'auraLightning', 0, 3, timesText, 1, 'x1')
       im.EndTabItem()
@@ -748,6 +756,8 @@ sendFrame = function()
   frame.auraThickness = settings.auraThickness
   frame.auraIntensity = settings.auraIntensity
   frame.auraLightning = settings.auraLightning
+  frame.auraBody = settings.auraBodyShape and 1 or 0
+  frame.auraLength = settings.auraLength
   frame.trailFade = settings.trailFade
   frame.jumpStyle = settings.jumpStyle
   frame.ballSpin = settings.ballSpin

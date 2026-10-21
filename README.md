@@ -13,7 +13,7 @@ Load any map in Freeroam and you start on foot as the actual Sonic from Sonic Fr
 ## Features
 - **Real Frontiers Sonic**: model, textures and animations that speed up with him (run, boost, drifts, jumps, air tricks).
 - **Unlimited boost**: hold Shift and keep accelerating. Set a top speed (or none) in the O menu.
-- **Frontiers boost effects**: radial speed blur, the electric-blue boost aura with lightning crackling on his body, the Power Boost trail with lightning arcs and crackling bolts, and a flash with glowing orbs when the boost kicks in. Effects grow with your speed.
+- **Frontiers boost effects**: radial speed blur, an electric-blue boost aura streaming around him like in the Sonic artwork, with lightning crackling on his body, the Power Boost trail with lightning arcs and crackling bolts, and a flash with glowing orbs when the boost kicks in. Effects grow with your speed.
 - **His sounds**: footsteps that match the ground (asphalt, dirt, grass, sand, snow, water, metal), jump, boost, landing, brake, speed wind, a sonic boom on fast boosts.
 - **A real shadow** that follows his silhouette and BeamNG's sun.
 - **Frontiers' jump ball**: Sonic curls up into a spinning blue ball when he jumps, in Frontiers' own spin shell. Choose in the Lab whether he stays a ball, does tricks after the top of the jump, or does a trick when you hold a direction in the air; tune the spin speed, the glow and the jump height.

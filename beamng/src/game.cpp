@@ -121,7 +121,7 @@ struct State {
     float trail_on = 0;
     struct Bolt { V3 pos, vel; double born; float life, size, spin; int kind, cell; int node = -1; };   // node: on Sonic's bone (pos is then an offset)
     std::vector<Bolt> bolts;
-    double bolt_debt = 0, arc_reroll = 0, body_bolt_debt = 0;
+    double bolt_debt = 0, arc_reroll = 0, body_bolt_debt = 0, aura_clock = 0;
     int arc_column = 0;
     std::vector<V3> arc_jitter;
     double step_phase = 0;
@@ -604,8 +604,29 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         scene.blur = s.blur * std::max(0.0f, f->blurStrength);
         scene.aura = s.aura * tuning::auraOpacity * fx_speed * std::max(0.0f, f->auraIntensity);
         scene.aura_thickness = std::max(0.0f, f->auraThickness);
+        // boost aura shape (Sonic artwork): lying along the run, a round shield just ahead of his face,
+        // streaming back past his feet and fading away; it points where he is really going (slopes and
+        // jumps too), thickness sets its girth, length (and his speed) how far it streams back
+        scene.aura_dome = f->auraBody == 0;
+        if (scene.aura_dome) {
+            const float H = tuning::sonicHeightMeters, size = 0.8f + 0.25f * scene.aura_thickness;
+            const V3 vel = v3(f->vel);
+            const V3 dir = length(vel) > 1.5f ? norm(vel) : V3{std::cos(s.heading), std::sin(s.heading), 0};
+            const V3 upz{0, 0, 1};
+            V3 up_axis = upz - dir * dot(upz, dir);
+            up_axis = length(up_axis) > 1e-3f ? norm(up_axis) : V3{0, 1, 0};
+            const V3 side = cross(dir, up_axis);
+            const float radius = 0.62f * H * size, nose = 0.75f * radius;
+            const V3 chest = feet + up_axis * (0.5f * H);
+            const V3 base = chest + dir * (0.45f * H * size - nose);   // the nose's tip sits just ahead of his face
+            copy(basis(side * radius, up_axis * radius, dir * nose, base), scene.dome_model);
+            const float tail = (1.0f + 2.2f * fx_ratio) * H * std::max(0.0f, f->auraLength);
+            scene.dome_tail = std::max(0.05f, tail / nose);
+        }
         scene.aura *= 1 - s.ball_amount;   // the aura's bright rim streaked round the ball: the ball has its own glow
-        scene.aura_time = float(std::fmod(now, 1000.0));
+        // the aura's energy streams back faster as Sonic speeds up
+        s.aura_clock = std::fmod(s.aura_clock + dt * (0.6 + 2.2 * fx_ratio), 1000.0);
+        scene.aura_time = float(s.aura_clock);
         // streaks point at Sonic's chest on screen
         const V3 chest = feet + V3{0, 0, 0.6f};
         const float vx = dot(chest - cam, right), vy = dot(chest - cam, up), vz = dot(chest - cam, fwd);
