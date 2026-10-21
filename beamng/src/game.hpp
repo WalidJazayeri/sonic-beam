@@ -27,7 +27,7 @@ struct Sprite {
     float size;                    // metres, full width
     float alpha;
     float spin;                    // radians
-    int kind;                      // 0 glow flash, 1 shock wave, 2 lightning bolt, 3 glowing orb
+    int kind;                      // 0 glow flash, 1 shock wave, 2 lightning bolt, 3 glowing orb, 4 soft round glow (jump ball)
     float uv[4] = {0, 0, 1, 1};    // texture rectangle (a cell of the bolt sheet)
 };
 

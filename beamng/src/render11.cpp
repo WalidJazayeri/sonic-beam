@@ -590,6 +590,7 @@ void draw_frame(IDXGISwapChain *chain)
         r.context->OMSetBlendState(r.blend_add, factor, 0xffffffff);
         draw_flat(draw::sprite_vertices(scene, 0), scene.view, scene.proj, 2, r.glow_texture);
         draw_flat(draw::sprite_vertices(scene, 1), scene.view, scene.proj, 3, r.wave_texture);
+        draw_flat(draw::sprite_vertices(scene, 4), scene.view, scene.proj, 1, r.white_texture);   // jump ball glow: soft round, untextured
         if (r.trail_texture >= 0) {
             draw_flat(draw::sprite_vertices(scene, 2), scene.view, scene.proj, 4, r.bolt_texture);
             draw_flat(draw::sprite_vertices(scene, 3), scene.view, scene.proj, 4, r.orb_texture);

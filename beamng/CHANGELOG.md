@@ -5,6 +5,10 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.8.1
+- Boule du saut : plus de petites lumières blanches qui tournent autour. Le halo (« Ball glow ») est maintenant une lueur bleue ronde, douce et fixe, sans texture ni rotation ; l'aura du boost (son liseré clair à rayures) s'efface pendant la boule.
+- Traînée du boost : elle part juste derrière Sonic et apparaît en fondu sur son premier mètre, au lieu d'un bord net collé à lui ; quand elle pointe vers la caméra (dérapage, virage serré), elle se couche à plat au lieu de se mettre de champ en une ligne d'épaisseur changeante.
+
 ## v0.8.0
 - Saut en boule comme dans Sonic Frontiers : au saut, Sonic passe par `jump_s` puis se roule en boule (`ball_loop`) et tourne sur lui-même dans la coque de spin de Frontiers (`chr_sonicspin.model`, son squelette et sa boucle `spin_normal_loop`), avec un halo bleu (aura + lueur). Il se déroule à l'atterrissage. Un saut sans boule (chute d'un rebord) reste comme avant.
 - Labo, nouvel onglet **Jump** :

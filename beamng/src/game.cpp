@@ -391,8 +391,9 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
             scene.ball_alpha = s.ball_amount;
             scene.ball_visible = true;
         }
+        // a soft, still, round blue glow (no texture and no spin: they made white dashes run round the ball)
         const float glow = std::max(0.0f, f->ballGlow) * s.ball_amount;
-        if (glow > 0.01f) scene.sprites.push_back({{pivot.x, pivot.y, pivot.z}, 1.5f, std::min(1.0f, 0.45f * glow), float(now * 3), 0});
+        if (glow > 0.01f) scene.sprites.push_back({{pivot.x, pivot.y, pivot.z}, 1.7f, std::min(1.0f, 0.5f * glow), 0, 4});
         scene.sonic_visible = true;
         const uint32_t n = d->clips[0].nodes * 12;
         scene.pose.resize(n);
@@ -485,7 +486,8 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         const float intensity = std::max(0.0f, f->trailIntensity) * fx_speed, lightning = std::max(0.0f, f->lightning) * fx_speed;
         const bool active = f->onFoot && f->boost && s.speed_kmh > 40;
         s.trail_on += ((active ? 1.0f : 0.0f) - s.trail_on) * std::min(1.0f, float(dt) * (active ? 10 : 3));
-        const V3 chest = feet + V3{0, 0, 0.55f};
+        const V3 travel = length(v3(f->vel)) > 1 ? norm(v3(f->vel)) : V3{std::cos(s.heading), std::sin(s.heading), 0};
+        const V3 chest = feet + V3{0, 0, 0.55f} - travel * 0.35f;   // just behind Sonic's back
         const double keep = tuning::trailSeconds * trail_len;
         if (!f->onFoot) s.trail.clear();
         if (active && (s.trail.empty() || length(chest - s.trail.back().pos) > 0.25f)) s.trail.push_back({chest, now});
@@ -510,9 +512,21 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
                 const V3 dir = i + 1 < path.size() ? path[i].pos - path[i + 1].pos : (i > 0 ? path[i - 1].pos - path[i].pos : fwd);
                 if (i > 0) along += length(path[i - 1].pos - path[i].pos);
                 const float age = float((now - path[i].born) / std::max(0.05, keep));
-                const float fade = std::pow(std::max(0.0f, 1 - age), 1.5f) * alpha * s.trail_on;
-                V3 side = cross(norm(dir), norm(p - cam));
-                side = norm(side) * (width * (0.15f + 0.85f * std::max(0.0f, 1 - age)) * 0.5f);
+                // fades in over its first metre (no hard edge at Sonic)
+                const float head = std::min(1.0f, along / 1.0f);
+                const float fade = std::pow(std::max(0.0f, 1 - age), 1.5f) * alpha * s.trail_on * head * head;
+                // faces the camera, but turns flat (across the ground) where it points at the camera,
+                // instead of spinning on edge into a thin line of changing width
+                const V3 d = norm(dir);
+                V3 facing = cross(d, norm(p - cam));
+                const float edge = length(facing);
+                V3 flat = cross(d, V3{0, 0, 1});
+                if (length(flat) < 1e-3f) flat = right;
+                flat = norm(flat);
+                if (dot(facing, flat) < 0) flat = flat * -1.0f;
+                const float k_face = std::min(1.0f, edge / 0.5f);
+                V3 side = norm(norm(facing) * k_face + flat * (1 - k_face));
+                side = side * (width * (0.15f + 0.85f * std::max(0.0f, 1 - age)) * 0.5f);
                 const V3 l = p - side, r = p + side;
                 const float v = along / v_scale - float(now) * v_speed;
                 if (have) {
@@ -565,7 +579,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         s.aura = lit ? std::min(1.0f, s.aura + rate) : std::max(0.0f, s.aura - rate);
         scene.blur = s.blur * std::max(0.0f, std::min(2.0f, f->blurStrength));
         scene.aura = s.aura * tuning::auraOpacity * fx_speed;
-        scene.aura = std::max(scene.aura, std::min(1.0f, std::max(0.0f, f->ballGlow) * 0.7f) * s.ball_amount);
+        scene.aura *= 1 - s.ball_amount;   // the aura's bright rim streaked round the ball: the ball has its own glow
         scene.aura_time = float(std::fmod(now, 1000.0));
         // streaks point at Sonic's chest on screen
         const V3 chest = feet + V3{0, 0, 0.6f};

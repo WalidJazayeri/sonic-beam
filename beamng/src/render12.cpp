@@ -624,6 +624,7 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
     if (scene.camera && !scene.sprites.empty()) {
         draw_flat(f, draw::sprite_vertices(scene, 0), scene.view, scene.proj, 2, c.glow_texture, c.glow);
         draw_flat(f, draw::sprite_vertices(scene, 1), scene.view, scene.proj, 3, c.wave_texture, c.glow);
+        draw_flat(f, draw::sprite_vertices(scene, 4), scene.view, scene.proj, 1, c.white_texture, c.glow);   // jump ball glow: soft round, untextured
         draw_flat(f, draw::sprite_vertices(scene, 2), scene.view, scene.proj, 4, c.bolt_texture, c.glow);
         draw_flat(f, draw::sprite_vertices(scene, 3), scene.view, scene.proj, 4, c.orb_texture, c.glow);
     }
