@@ -66,6 +66,7 @@ local onFootDone = false          -- Sonic starts each map on foot once; after t
 local runnerLoadedFor = nil
 local cameraActive = false
 local hiddenUnicycle = nil
+local hiddenAt = -100             -- when the walker's meshes were last hidden (clock)
 local runnerBoost, runnerGrounded, pendingJumps = 0, 0, 0
 local runnerWantsMove, runnerSurface = 0, 0     -- stick pushed, ground under Sonic (footsteps)
 local rings = {}                  -- {pos = vec3, born = seconds}
@@ -577,8 +578,10 @@ local function onPreRender(dtReal, dtSim)
       autopilotSent = testMode
       unicycle:queueLuaCommand('if sonicfrontiers_runner then sonicfrontiers_runner.setAutopilot(' .. tostring(testMode) .. ') end')
     end
-    if hiddenUnicycle ~= id then
-      hiddenUnicycle = id
+    -- BeamNG 0.40.1's walker is a whole character, and the game shows its meshes again on its own
+    -- (camera changes, physics resets): hide them again on those events and twice a second anyway
+    if hiddenUnicycle ~= id or clock - hiddenAt > 0.5 then
+      hiddenUnicycle, hiddenAt = id, clock
       unicycle:setMeshAlpha(0, '')
     end
     groundedByRay = updateBody(unicycle)
@@ -689,6 +692,15 @@ local function onClientStartMission()
   cameraActive = false
 end
 
+-- the game may have shown the walker's meshes again: hide them on the next frame
+local function onCameraChanged()
+  hiddenUnicycle = nil
+end
+
+local function onVehicleResetted(vid)
+  if vid == hiddenUnicycle then hiddenUnicycle = nil end
+end
+
 local function onClientEndMission()
   setSonicCamera(false)
   rings = {}
@@ -712,6 +724,8 @@ end
 
 M.onExtensionLoaded = onExtensionLoaded
 M.onPreRender = onPreRender
+M.onCameraChanged = onCameraChanged
+M.onVehicleResetted = onVehicleResetted
 M.onUpdate = onUpdate
 M.onDrawDebug = onDrawDebug
 M.toggleMenu = toggleMenu
