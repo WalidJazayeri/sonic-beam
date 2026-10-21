@@ -73,6 +73,18 @@ bool load_all()
         if (ok) mod::log("assets: boost aura %zu vertices, effect textures %ux%u", data.aura.vertices.size(), data.aura_texture.width, data.aura_texture.height);
         else mod::log("assets: boost effect unavailable (%s) - continuing without it", error.c_str());
     }
+    // Jump ball: Frontiers' spin ball shell (its own small skeleton and loop) around Sonic curled up
+    {
+        frontiers::Skeleton ball_skeleton;
+        const frontiers::PacEntry *skl = sonic_pac.find(sheets::ball_skeleton.entry);
+        const frontiers::PacEntry *clip = sonic_pac.find(sheets::ball_clip.entry);
+        data.ball_clip.name = "ball_shell";
+        data.ball_fx = frontiers::parse_model(sonic_pac, sheets::ball_model.entry, data.ball, error) &&
+                       skl && frontiers::parse_skeleton(*skl, ball_skeleton, error) &&
+                       clip && frontiers::bake_clip(*clip, ball_skeleton, data.ball, data.ball_clip, error);
+        if (data.ball_fx) mod::log("assets: spin ball %zu vertices, %zu nodes, %u frames", data.ball.vertices.size(), data.ball.nodes.size(), data.ball_clip.frames);
+        else mod::log("assets: spin ball unavailable (%s) - Sonic still curls up without it", error.c_str());
+    }
     // Footsteps: a foot lands when its toe comes down through the bottom fifth of its range.
     {
         int toes[2] = {-1, -1};

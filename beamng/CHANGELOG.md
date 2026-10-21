@@ -5,6 +5,13 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.8.0
+- Saut en boule comme dans Sonic Frontiers : au saut, Sonic passe par `jump_s` puis se roule en boule (`ball_loop`) et tourne sur lui-même dans la coque de spin de Frontiers (`chr_sonicspin.model`, son squelette et sa boucle `spin_normal_loop`), avec un halo bleu (aura + lueur). Il se déroule à l'atterrissage. Un saut sans boule (chute d'un rebord) reste comme avant.
+- Labo, nouvel onglet **Jump** :
+  - trois cases (une seule cochée à la fois) : boule pendant tout le saut sans figures ; boule à la montée puis figures/chute après le sommet ; boule avec une figure quand on tient une direction en l'air (A gauche, D droite, S vers le haut) ;
+  - « Ball spin speed » (tours par seconde, 3 par défaut), « Ball glow » (×1), « Jump height » (×1, la hauteur suit le réglage).
+- Labo, onglet Boost : « Speed blur strength » (force du flou de vitesse, ×1 par défaut, 0 = sans flou).
+
 ## v0.7.1
 - BeamNG 0.40.1 : le piéton de BeamNG est maintenant un vrai personnage, et le jeu réaffiche ses morceaux de lui-même (changement de caméra, réinitialisation après une instabilité). Sonic Beam le re-cache à ces moments-là et le revérifie deux fois par seconde : plus de mannequin derrière Sonic.
 

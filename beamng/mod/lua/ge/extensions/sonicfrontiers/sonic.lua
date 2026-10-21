@@ -50,6 +50,11 @@ typedef struct {
   float lightning;
   float fxSpeedAmount;
   float fxRefKmh;
+  int32_t jumpStyle;
+  float ballSpin;
+  float ballGlow;
+  float blurStrength;
+  int32_t airInput;
   int32_t ringCount;
   float rings[768];
 } SonicBeamPacket;
@@ -68,7 +73,8 @@ local cameraActive = false
 local hiddenUnicycle = nil
 local hiddenAt = -100             -- when the walker's meshes were last hidden (clock)
 local runnerBoost, runnerGrounded, pendingJumps = 0, 0, 0
-local runnerWantsMove, runnerSurface = 0, 0     -- stick pushed, ground under Sonic (footsteps)
+local runnerWantsMove, runnerSurface = 0, 0
+local runnerAirInput = 0          -- direction held in the air (1 left, 2 right, 3 back): tricks     -- stick pushed, ground under Sonic (footsteps)
 local rings = {}                  -- {pos = vec3, born = seconds}
 local lastSpawn = -100
 local clock = 0
@@ -109,6 +115,9 @@ local settings = {
   shadowOpacity = 0.55, -- Sonic's shadow
   trailLength = 1, trailIntensity = 1, lightning = 1,   -- Power Boost trail and lightning
   fxBySpeed = true, fxSpeedAmount = 0.75,              -- trail, lightning and aura grow with Sonic's speed
+  blurStrength = 1,                                    -- speed blur multiplier
+  -- jump: 0 ball the whole jump, 1 ball going up then tricks, 2 ball with tricks on a direction
+  jumpStyle = 0, ballSpin = 3, ballGlow = 1, jumpHeight = 1,
 }
 local menuOpen = false
 local menuWidgets = nil
@@ -165,6 +174,10 @@ local function openLab(tab)
     lightning = im.FloatPtr(settings.lightning),
     fxBySpeed = im.BoolPtr(settings.fxBySpeed),
     fxSpeedAmount = im.FloatPtr(settings.fxSpeedAmount),
+    blurStrength = im.FloatPtr(settings.blurStrength),
+    ballSpin = im.FloatPtr(settings.ballSpin),
+    ballGlow = im.FloatPtr(settings.ballGlow),
+    jumpHeight = im.FloatPtr(settings.jumpHeight),
     open = im.BoolPtr(true),
     place = true,
     tab = tab,          -- open on this tab once (developer tests)
@@ -187,17 +200,27 @@ end
 -- one lab setting: slider, its value written beside it, and a button back to the default
 local function labSlider(label, ptr, key, low, high, text, default, defaultLabel)
   im.PushItemWidth(260 * im.uiscale[0])
+  local changed = false
   if im.SliderFloat(label, ptr, low, high, '', nil) then
     settings[key] = clamp(ptr[0], low, high)
+    changed = true
   end
   im.PopItemWidth()
   im.SameLine()
   im.TextUnformatted(text(settings[key]))   -- not im.Text: it reads % as a format code
   im.SameLine()
-  if im.SmallButton(defaultLabel .. '##' .. key) then ptr[0] = default; settings[key] = default end
+  if im.SmallButton(defaultLabel .. '##' .. key) then ptr[0] = default; settings[key] = default; changed = true end
+  return changed
 end
 
 local function timesText(x) return string.format('x%.2f', x) end
+
+-- Lab, Jump tab: one box per jump style, only one ticked at a time
+local JUMP_STYLES = {
+  'Ball for the whole jump (no tricks)',
+  'Ball going up, then tricks or a normal fall after the top of the jump',
+  'Ball, and a trick when you hold a direction in the air (A, D or S)',
+}
 
 -- speed at which the boost effects are at full strength: the O menu's top speed, or 500 km/h
 -- when the speed limit is off
@@ -224,7 +247,7 @@ local function drawLab()
     im.SetNextWindowPos(im.ImVec2(view.Pos.x + view.Size.x * 0.02, view.Pos.y + view.Size.y * 0.24), im.Cond_Always, im.ImVec2(0, 0))
     im.SetNextWindowSize(im.ImVec2(600 * im.uiscale[0], 0), im.Cond_Always)
   end
-  im.Begin('Sonic Beam Lab', w.open, im.WindowFlags_NoCollapse)
+  im.Begin('Sonic Beam Lab', w.open, im.WindowFlags_NoCollapse + im.WindowFlags_AlwaysAutoResize)   -- the window fits the open tab
   -- one tab per theme; Close and save stays below whichever tab is open
   if im.BeginTabBar('##sonicLabTabs') then
     if labTab('Sound') then
@@ -248,6 +271,19 @@ local function drawLab()
       if not w.fxBySpeed[0] then im.BeginDisabled(true) end
       labSlider('Speed influence', w.fxSpeedAmount, 'fxSpeedAmount', 0, 1, function(x) return string.format('%.2f (from %d %%)', x, math.floor((1 - x) * 100 + 0.5)) end, 0.75, '0.75')
       if not w.fxBySpeed[0] then im.EndDisabled() end
+      im.Spacing()
+      labSlider('Speed blur strength', w.blurStrength, 'blurStrength', 0, 2, timesText, 1, 'x1')
+      im.EndTabItem()
+    end
+    if labTab('Jump') then
+      im.TextUnformatted('Sonic curls up into a ball when he jumps:')
+      for i, style in ipairs(JUMP_STYLES) do
+        if im.Checkbox(style .. '##jumpStyle' .. i, im.BoolPtr(settings.jumpStyle == i - 1)) then settings.jumpStyle = i - 1 end
+      end
+      im.Spacing()
+      labSlider('Ball spin speed', w.ballSpin, 'ballSpin', 0, 8, function(x) return string.format('%.1f turns/s', x) end, 3, '3')
+      labSlider('Ball glow', w.ballGlow, 'ballGlow', 0, 2, timesText, 1, 'x1')
+      if labSlider('Jump height', w.jumpHeight, 'jumpHeight', 0.5, 3, timesText, 1, 'x1') then settingsSent = nil end
       im.EndTabItem()
     end
     if labTab('Animation') then
@@ -524,8 +560,9 @@ local function setSonicCamera(on)
 end
 
 -- called by the runner inside the walking body, every graphics frame
-local function onRunner(boost, jumps, grounded, wantsMove, surface)
+local function onRunner(boost, jumps, grounded, wantsMove, surface, airInput)
   runnerBoost, runnerGrounded, runnerWantsMove, runnerSurface = boost, grounded, wantsMove or 0, surface or 0
+  runnerAirInput = airInput or 0
   pendingJumps = pendingJumps + jumps
 end
 
@@ -571,8 +608,8 @@ local function onPreRender(dtReal, dtSim)
     end
     if settingsSent ~= id then
       settingsSent = id
-      unicycle:queueLuaCommand(string.format('if sonicfrontiers_runner then sonicfrontiers_runner.setSpeedSettings(%s, %f, %f) end',
-        tostring(settings.speedCapOn), settings.speedCapKmh, settings.boostRampKmhPerSecond))
+      unicycle:queueLuaCommand(string.format('if sonicfrontiers_runner then sonicfrontiers_runner.setSpeedSettings(%s, %f, %f, %f) end',
+        tostring(settings.speedCapOn), settings.speedCapKmh, settings.boostRampKmhPerSecond, settings.jumpHeight))
     end
     if autopilotSent ~= testMode then
       autopilotSent = testMode
@@ -662,6 +699,11 @@ sendFrame = function()
   frame.lightning = settings.lightning
   frame.fxSpeedAmount = settings.fxBySpeed and settings.fxSpeedAmount or 0
   frame.fxRefKmh = fxReferenceKmh()
+  frame.jumpStyle = settings.jumpStyle
+  frame.ballSpin = settings.ballSpin
+  frame.ballGlow = settings.ballGlow
+  frame.blurStrength = settings.blurStrength
+  frame.airInput = runnerAirInput
   if groundPos then
     frame.hasGround = 1
     frame.groundPos[0], frame.groundPos[1], frame.groundPos[2] = groundPos.x, groundPos.y, groundPos.z

@@ -22,6 +22,10 @@ struct Data {
     // Power Boost trail and lightning (optional too)
     bool trail_fx = false;
     frontiers::Texture trail_texture, bolt_texture, arc_texture, orb_texture;
+    // Frontiers' spin ball shell around Sonic curled up in a jump (optional too)
+    bool ball_fx = false;
+    frontiers::Model ball;
+    frontiers::Clip ball_clip;
     // when each foot touches the ground in each clip, as a share of the loop (footstep sounds)
     std::vector<std::vector<float>> step_phases;   // indexed by sheets::Anim
 };

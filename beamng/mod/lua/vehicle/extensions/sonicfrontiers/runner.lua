@@ -46,6 +46,7 @@ local walkerSpeedCoef = nil
 local speedCapOn = P.speedCapOn == 1
 local speedCapMs = P.speedCapKmh / 3.6
 local boostRamp = P.boostRampKmhPerSecond / 3.6
+local jumpSpeed = P.jumpSpeed     -- Sonic Beam Lab: Jump height (the height grows with the square of this speed)
 local debugInfo = {}           -- last physics step, for the developer probe M.getDebug
 
 local function wrapPlayerController()
@@ -308,14 +309,17 @@ local function updateGFX(dt)
       local vz = obj:getVelocity().z
       jumpTimer = 0.05
       snapLock = 0.6
-      jumpAccel = math.max(0, P.jumpSpeed - vz) / jumpTimer
+      jumpAccel = math.max(0, jumpSpeed - vz) / jumpTimer
       jumpsToReport = jumpsToReport + 1
     end
   end
   local _, amount = inputDirection()
   local boosting = (boostHeld > 0.5 and amount > 0.1) and 1 or 0
-  obj:queueGameEngineLua(string.format('if sonicfrontiers_sonic then sonicfrontiers_sonic.onRunner(%d, %d, %d, %d, %d) end',
-    boosting, jumpsToReport, grounded and 1 or 0, amount > 0.1 and 1 or 0, surfaceIndex()))
+  -- direction held in the air, for the jump ball's tricks: 1 left, 2 right, 3 back
+  local airInput = 0
+  if walkX < -0.5 then airInput = 1 elseif walkX > 0.5 then airInput = 2 elseif walkY < -0.5 then airInput = 3 end
+  obj:queueGameEngineLua(string.format('if sonicfrontiers_sonic then sonicfrontiers_sonic.onRunner(%d, %d, %d, %d, %d, %d) end',
+    boosting, jumpsToReport, grounded and 1 or 0, amount > 0.1 and 1 or 0, surfaceIndex(), airInput))
   jumpsToReport = 0
 end
 
@@ -359,12 +363,13 @@ M.setEnabled = function(on)
   end
   log('I', 'sonicfrontiers', on and 'Sonic takes over the walking body' or 'walking body handed back to BeamNG')
 end
-M.setSpeedSettings = function(capOn, capKmh, rampKmhPerSecond)
+M.setSpeedSettings = function(capOn, capKmh, rampKmhPerSecond, jumpHeight)
   speedCapOn = capOn and true or false
+  jumpSpeed = P.jumpSpeed * math.sqrt(clamp(jumpHeight or 1, 0.25, 4))
   speedCapMs = math.max(10, capKmh or P.speedCapKmh) / 3.6
   boostRamp = math.max(1, rampKmhPerSecond or P.boostRampKmhPerSecond) / 3.6
-  log('I', 'sonicfrontiers', string.format('speed: limit %s at %.0f km/h, boost +%.0f km/h per second',
-    tostring(speedCapOn), speedCapMs * 3.6, boostRamp * 3.6))
+  log('I', 'sonicfrontiers', string.format('speed: limit %s at %.0f km/h, boost +%.0f km/h per second, jump %.1f m/s',
+    tostring(speedCapOn), speedCapMs * 3.6, boostRamp * 3.6, jumpSpeed))
 end
 M.setAutopilot = function(on)
   autopilot = on and true or false

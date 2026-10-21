@@ -42,6 +42,19 @@ M4 scale(float s) { M4 r = identity(); r.m[0] = r.m[5] = r.m[10] = s; return r; 
 M4 scale3(float x, float y, float z) { M4 r = identity(); r.m[0] = x; r.m[5] = y; r.m[10] = z; return r; }
 M4 rot_y(float a) { M4 r = identity(); const float c = std::cos(a), s = std::sin(a); r.m[0] = c; r.m[2] = -s; r.m[8] = s; r.m[10] = c; return r; }
 M4 rot_z(float a) { M4 r = identity(); const float c = std::cos(a), s = std::sin(a); r.m[0] = c; r.m[1] = s; r.m[4] = -s; r.m[5] = c; return r; }
+M4 translate(V3 t) { M4 r = identity(); r.m[12] = t.x; r.m[13] = t.y; r.m[14] = t.z; return r; }
+// rotation by `a` around the unit axis `n` through the point `at` (row vectors)
+M4 rot_around(V3 n, float a, V3 at)
+{
+    const float c = std::cos(a), s = std::sin(a), t = 1 - c;
+    M4 r = identity();
+    // column-vector Rodrigues matrix, stored transposed for p' = p * M
+    const float m[3][3] = {{t * n.x * n.x + c, t * n.x * n.y - s * n.z, t * n.x * n.z + s * n.y},
+                           {t * n.x * n.y + s * n.z, t * n.y * n.y + c, t * n.y * n.z - s * n.x},
+                           {t * n.x * n.z - s * n.y, t * n.y * n.z + s * n.x, t * n.z * n.z + c}};
+    for (int i = 0; i < 3; ++i) for (int j = 0; j < 3; ++j) r.m[j * 4 + i] = m[i][j];
+    return mul(mul(translate(at * -1.0f), r), translate(at));
+}
 // Rows are where model X, Y, Z go, then the position.
 M4 basis(V3 x, V3 y, V3 z, V3 p)
 {
@@ -90,6 +103,11 @@ struct State {
     int state = int(sheets::State::idle), candidate = -1, logged_state = -1;
     double candidate_since = 0;
     int trick_step = 0;
+    // jump ball (Sonic Beam Lab, Jump): this airtime started with a jump; past the top of it
+    bool jump_air = false, past_apex = false;
+    double jump_at = -100, air_trick_until = 0;
+    int air_trick = -1;
+    float ball_angle = 0, ball_amount = 0;
     double event_until = 0;
     std::vector<Popup> popups;
     int rings = 0, plus = 0;
@@ -159,6 +177,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     scene.arcs.clear();
     scene.blur = 0;
     scene.aura = 0;
+    scene.ball_visible = false;
     const double dt = s.last_frame ? std::min(0.1, now - s.last_frame) : 0.016;
     s.last_frame = now;
     if (!d) {
@@ -216,6 +235,13 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     const float landed_air = landed ? float(s.air_time) : 0;
     if (!s.air && !landed) s.air_time = 0;
     if (f->jumped) audio::play(Sound::jump);
+    // ---------------- jump ball (Frontiers: Sonic curls up into a spinning ball when he jumps)
+    const int jump_style = std::max(0, std::min(2, int(f->jumpStyle)));
+    if (f->jumped && f->onFoot) { s.jump_air = true; s.past_apex = false; s.jump_at = now; s.air_trick = -1; }
+    if (landed || !f->onFoot || (s.jump_air && !s.air && now - s.jump_at > 0.4)) s.jump_air = false;
+    if (s.jump_air && f->vel[2] < 0 && now - s.jump_at > 0.15) s.past_apex = true;
+    // the ball holds the air tricks back: for the whole jump (0), up to the top (1), or until a direction is held (2)
+    const bool ball_jump = s.jump_air && !(jump_style == 1 && s.past_apex);
     const int turn = s.turn_rate / kDeg > tuning::turnRateDegrees ? 1 : s.turn_rate / kDeg < -tuning::turnRateDegrees ? 2 : 0;
 
     // ---------------- state selection (sheets/states.json)
@@ -225,6 +251,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         if (s.speed_kmh < row.minKmh || s.speed_kmh >= row.maxKmh) continue;
         if (row.air >= 0 && (row.air == 1) != s.air) continue;
         if (row.air == 1 && s.air_time < row.minAirSeconds) continue;
+        if (ball_jump && i == int(sheets::State::trick)) continue;
         if (row.boost >= 0 && (row.boost == 1) != (f->boost != 0)) continue;
         if (row.turn >= 0 && row.turn != turn) continue;
         if (best < 0 || row.priority > states[best].priority) best = i;
@@ -288,7 +315,23 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
 
     // ---------------- animation
     Anim want = states[s.state].animation;
-    if (s.state == int(sheets::State::trick)) {
+    // style 2: holding a direction in the air plays that trick, then Sonic curls up again
+    bool ball_now = ball_jump;
+    if (ball_jump && jump_style == 2) {
+        if (s.air_trick < 0 && f->airInput > 0 && s.air) {
+            s.air_trick = f->airInput == 1 ? int(Anim::trick_left) : f->airInput == 2 ? int(Anim::trick_right) : int(Anim::trick_up);
+            s.air_trick_until = now + d->clips[s.air_trick].duration + 0.05;
+            audio::play(Sound::trick);
+        }
+        if (s.air_trick >= 0 && now >= s.air_trick_until) s.air_trick = f->airInput > 0 ? -1 : -2;   // -2: wait for the release
+        if (s.air_trick == -2 && f->airInput == 0) s.air_trick = -1;
+        if (s.air_trick >= 0) { ball_now = false; want = Anim(s.air_trick); }
+    }
+    if (ball_now) {
+        const double start = std::min(0.22, double(d->clips[int(Anim::jump_start)].duration));
+        want = now - s.jump_at < start ? Anim::jump_start : Anim::ball;
+    } else if (s.air_trick >= 0) {
+    } else if (s.state == int(sheets::State::trick)) {
         static const Anim tricks[3] = {Anim::trick_up, Anim::trick_left, Anim::trick_right};
         const Anim current = tricks[s.trick_step % 3];
         if (s.player.anim == int(current) && s.player.time > d->clips[s.player.anim].duration + 0.12) ++s.trick_step;
@@ -329,8 +372,27 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         const float k = tuning::sonicHeightMeters / d->sonic_height;
         const V3 face{std::cos(s.heading), std::sin(s.heading), 0}, upz{0, 0, 1};
         const V3 r = cross(face, upz);
-        const M4 sonic = mul(rot_z(-s.lean), basis(r * -k, upz * k, face * k, feet));
+        M4 sonic = mul(rot_z(-s.lean), basis(r * -k, upz * k, face * k, feet));
+        // the jump ball: Sonic rolls forward around the middle of the ball, inside Frontiers' spin shell
+        const bool rolling = ball_now && s.player.anim == int(Anim::ball);
+        s.ball_amount += ((rolling ? 1.0f : 0.0f) - s.ball_amount) * std::min(1.0f, float(dt) * (rolling ? 14 : 10));
+        if (rolling) s.ball_angle = float(std::fmod(s.ball_angle + dt * std::max(0.0f, f->ballSpin) * 2 * kPi, 2 * kPi));
+        else s.ball_angle = 0;
+        const V3 pivot = feet + upz * (tuning::sonicHeightMeters * 0.42f);
+        if (rolling) sonic = mul(sonic, rot_around(r, s.ball_angle, pivot));
         copy(sonic, scene.sonic_model);
+        if (s.ball_amount > 0.02f && d->ball_fx && !d->ball.nodes.empty()) {
+            const V3 centre{(d->ball.min[0] + d->ball.max[0]) * 0.5f, (d->ball.min[1] + d->ball.max[1]) * 0.5f, (d->ball.min[2] + d->ball.max[2]) * 0.5f};
+            M4 shell = mul(translate(centre * -1.0f), basis(r * -k, upz * k, face * k, pivot));
+            shell = mul(shell, rot_around(r, s.ball_angle, pivot));
+            copy(shell, scene.ball_model);
+            scene.ball_pose.resize(size_t(d->ball_clip.nodes) * 12);
+            sample(d->ball_clip, true, now, scene.ball_pose.data());
+            scene.ball_alpha = s.ball_amount;
+            scene.ball_visible = true;
+        }
+        const float glow = std::max(0.0f, f->ballGlow) * s.ball_amount;
+        if (glow > 0.01f) scene.sprites.push_back({{pivot.x, pivot.y, pivot.z}, 1.5f, std::min(1.0f, 0.45f * glow), float(now * 3), 0});
         scene.sonic_visible = true;
         const uint32_t n = d->clips[0].nodes * 12;
         scene.pose.resize(n);
@@ -501,8 +563,9 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         const bool lit = boosting || (f->boost && s.speed_kmh > 30) || s.state == int(sheets::State::fast);
         const float rate = float(dt) / std::max(0.01f, lit ? tuning::auraFadeIn : tuning::auraFadeOut);
         s.aura = lit ? std::min(1.0f, s.aura + rate) : std::max(0.0f, s.aura - rate);
-        scene.blur = s.blur;
+        scene.blur = s.blur * std::max(0.0f, std::min(2.0f, f->blurStrength));
         scene.aura = s.aura * tuning::auraOpacity * fx_speed;
+        scene.aura = std::max(scene.aura, std::min(1.0f, std::max(0.0f, f->ballGlow) * 0.7f) * s.ball_amount);
         scene.aura_time = float(std::fmod(now, 1000.0));
         // streaks point at Sonic's chest on screen
         const V3 chest = feet + V3{0, 0, 0.6f};

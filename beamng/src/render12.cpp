@@ -71,8 +71,8 @@ struct Context {
     ID3D12DescriptorHeap *srv = nullptr;
     UINT srv_stride = 0;
     int font_texture = 0, white_texture = 0;
-    GpuMesh sonic, ring, aura_mesh;
-    bool has_aura = false;
+    GpuMesh sonic, ring, aura_mesh, ball;
+    bool has_aura = false, has_ball = false;
     int aura_texture = -1, glow_texture = -1, wave_texture = -1;
     int trail_texture = -1, bolt_texture = -1, arc_texture = -1, orb_texture = -1;
     int copy_slot = -1;                           // descriptor of the frame copy the speed blur reads
@@ -276,6 +276,8 @@ bool upload_assets(const assets::Data &d)
     for (auto &t : d.sonic.textures) sources.push_back({&t, nullptr, 0, 0, 0, 0});
     c.ring.texture_base = int(sources.size());
     for (auto &t : d.ring.textures) sources.push_back({&t, nullptr, 0, 0, 0, 0});
+    c.ball.texture_base = int(sources.size());
+    if (d.ball_fx) for (auto &t : d.ball.textures) sources.push_back({&t, nullptr, 0, 0, 0, 0});
     static uint8_t atlas[font::atlas_w * font::atlas_h];
     font::build_atlas(atlas);
     c.font_texture = int(sources.size());
@@ -321,6 +323,7 @@ bool upload_assets(const assets::Data &d)
     };
     if (!mesh(d.sonic, c.sonic) || !mesh(d.ring, c.ring)) return false;
     c.has_aura = d.boost_fx && mesh(d.aura, c.aura_mesh);
+    c.has_ball = d.ball_fx && mesh(d.ball, c.ball);
     for (size_t i = 0; i < sources.size(); ++i) {
         const Source &s = sources[i];
         D3D12_RESOURCE_DESC td{};
@@ -601,6 +604,12 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
             draw_mesh(f, c.sonic, b, scene.sonic_model, scene.view, scene.proj, 1, 0);
             drew_sonic = true;
             if (c.has_aura && scene.aura > 0.01f) { draw_aura(f, b, scene, 0); draw_aura(f, b, scene, 1); }
+        }
+        // Frontiers' spin ball shell around Sonic curled up in a jump (its own bones)
+        if (c.has_ball && scene.ball_visible && !scene.ball_pose.empty()) {
+            std::vector<float> ball_bones(768 * 4, 0.0f);
+            std::memcpy(ball_bones.data(), scene.ball_pose.data(), std::min(ball_bones.size(), scene.ball_pose.size()) * 4);
+            if (const auto bb = push(f, ball_bones.data(), ball_bones.size() * 4)) draw_mesh(f, c.ball, bb, scene.ball_model, scene.view, scene.proj, scene.ball_alpha, 0);
         }
     }
     if (!scene.rings.empty()) {

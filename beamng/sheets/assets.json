@@ -5,7 +5,7 @@
     "id": "identifier",
     "archive": "PAC archive relative to the Frontiers install folder",
     "entry": "file inside the archive",
-    "kind": "model, skeleton, texture",
+    "kind": "model, skeleton, texture, animation",
     "use": "what the mod does with it",
     "verified": "parsed from the installed game and drawn in BeamNG"
   },
@@ -96,6 +96,30 @@
       "entry": "ef_n01_com_glowlight13.dds",
       "kind": "texture",
       "use": "glowing orbs when a boost starts (Power Boost)",
+      "verified": false
+    },
+    {
+      "id": "ball_model",
+      "archive": "image/x64/raw/character/sonic.pac",
+      "entry": "chr_sonicspin.model",
+      "kind": "model",
+      "use": "Frontiers' spin ball shell around Sonic curled up in a jump",
+      "verified": false
+    },
+    {
+      "id": "ball_skeleton",
+      "archive": "image/x64/raw/character/sonic.pac",
+      "entry": "chr_sonicspin.skl.pxd",
+      "kind": "skeleton",
+      "use": "bones of the spin ball shell",
+      "verified": false
+    },
+    {
+      "id": "ball_clip",
+      "archive": "image/x64/raw/character/sonic.pac",
+      "entry": "chr_sonicspin@spin_normal_loop.anm.pxd",
+      "kind": "animation",
+      "use": "the spin ball shell's own loop",
       "verified": false
     }
   ]

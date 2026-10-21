@@ -67,8 +67,8 @@ struct Renderer {
     ID3D11RasterizerState *raster = nullptr;
     std::vector<ID3D11ShaderResourceView *> textures;
     int font_texture = 0, white_texture = 0;
-    GpuMesh sonic, ring, aura;
-    bool has_aura = false;
+    GpuMesh sonic, ring, aura, ball;
+    bool has_aura = false, has_ball = false;
     int aura_texture = -1, glow_texture = -1, wave_texture = -1;
     int trail_texture = -1, bolt_texture = -1, arc_texture = -1, orb_texture = -1;
     ID3D11Texture2D *copy = nullptr;               // copy of BeamNG's frame for the speed blur
@@ -231,6 +231,7 @@ ID3D11ShaderResourceView *texture_view(const frontiers::Texture &t)
 bool upload_assets(const assets::Data &d)
 {
     if (!upload_mesh(d.sonic, r.sonic) || !upload_mesh(d.ring, r.ring)) return false;
+    r.has_ball = d.ball_fx && upload_mesh(d.ball, r.ball);
     if (d.boost_fx && upload_mesh(d.aura, r.aura)) {
         const int base = int(r.textures.size());
         r.textures.push_back(texture_view(d.aura_texture));
@@ -565,6 +566,11 @@ void draw_frame(IDXGISwapChain *chain)
             draw_mesh(r.sonic, scene.sonic_model, scene.view, scene.proj, 1, 0);
             drew_sonic = true;
             if (r.has_aura && scene.aura > 0.01f) { draw_aura(scene, 0); draw_aura(scene, 1); }
+            // Frontiers' spin ball shell around Sonic curled up in a jump (its own bones)
+            if (r.has_ball && scene.ball_visible && !scene.ball_pose.empty()) {
+                bind_bones(scene.ball_pose.data(), scene.ball_pose.size());
+                draw_mesh(r.ball, scene.ball_model, scene.view, scene.proj, scene.ball_alpha, 0);
+            }
         }
     }
     if (!scene.rings.empty()) {
