@@ -119,9 +119,9 @@ struct State {
     struct TrailPoint { V3 pos; double born; };
     std::vector<TrailPoint> trail;
     float trail_on = 0;
-    struct Bolt { V3 pos, vel; double born; float life, size, spin; int kind, cell; };
+    struct Bolt { V3 pos, vel; double born; float life, size, spin; int kind, cell; int node = -1; };   // node: on Sonic's bone (pos is then an offset)
     std::vector<Bolt> bolts;
-    double bolt_debt = 0, arc_reroll = 0;
+    double bolt_debt = 0, arc_reroll = 0, body_bolt_debt = 0;
     int arc_column = 0;
     std::vector<V3> arc_jitter;
     double step_phase = 0;
@@ -556,12 +556,36 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
                 s.bolts.push_back({at + V3{(rnd() - 0.5f) * 0.8f, (rnd() - 0.5f) * 0.8f, (rnd() - 0.5f) * 0.9f}, {}, now, 0.08f + 0.07f * rnd(), 0.45f + 0.5f * rnd(), rnd() * 6.28f, 2, int(rnd() * 16) & 15});
             }
         } else s.bolt_debt = 0;
+        // aura lightning: short arcs crackling on Sonic's arms, legs and quills while the aura is lit,
+        // each one riding a bone so it moves with him (Sonic Beam Lab: Aura lightning)
+        const float body_level = s.aura * fx_speed * std::max(0.0f, f->auraLightning) * (1 - s.ball_amount);
+        if (f->onFoot && body_level > 0.02f && !d->bone_rest.empty()) {
+            s.body_bolt_debt += dt * 26.0 * body_level;
+            while (s.body_bolt_debt >= 1) {
+                s.body_bolt_debt -= 1;
+                const int node = int(rnd() * float(d->bone_rest.size() / 3)) % int(d->bone_rest.size() / 3);
+                State::Bolt b{{(rnd() - 0.5f) * 0.16f, (rnd() - 0.5f) * 0.16f, (rnd() - 0.5f) * 0.16f}, {}, now, 0.06f + 0.08f * rnd(),
+                              0.22f + 0.28f * rnd(), rnd() * 6.28f, 2, int(rnd() * 16) & 15};
+                b.node = node;
+                s.bolts.push_back(b);
+            }
+        } else s.body_bolt_debt = 0;
         s.bolts.erase(std::remove_if(s.bolts.begin(), s.bolts.end(), [&](const State::Bolt &b) { return now - b.born > b.life || !f->onFoot; }), s.bolts.end());
         for (auto &b : s.bolts) {
             const float age = float(now - b.born);
             if (age < 0) continue;
             const float k = age / b.life;
-            Sprite sp{{b.pos.x + b.vel.x * age, b.pos.y + b.vel.y * age, b.pos.z + b.vel.z * age}, b.size, b.kind == 3 ? (1 - k) * (1 - k) : (1 - k), b.spin, b.kind};
+            V3 at = b.pos + b.vel * age;
+            if (b.node >= 0) {   // on a bone of Sonic's current pose, then into the world
+                if (!scene.sonic_visible || size_t(b.node) * 12 + 12 > scene.pose.size()) continue;
+                const float *m = &scene.pose[size_t(b.node) * 12], *rest = &d->bone_rest[size_t(b.node) * 3];
+                const float mx = m[0] * rest[0] + m[1] * rest[1] + m[2] * rest[2] + m[3];
+                const float my = m[4] * rest[0] + m[5] * rest[1] + m[6] * rest[2] + m[7];
+                const float mz = m[8] * rest[0] + m[9] * rest[1] + m[10] * rest[2] + m[11];
+                const float *w = scene.sonic_model;
+                at = V3{mx * w[0] + my * w[4] + mz * w[8] + w[12], mx * w[1] + my * w[5] + mz * w[9] + w[13], mx * w[2] + my * w[6] + mz * w[10] + w[14]} + b.pos;
+            }
+            Sprite sp{{at.x, at.y, at.z}, b.size, b.kind == 3 ? (1 - k) * (1 - k) : (1 - k), b.spin, b.kind};
             if (b.kind == 2) { const int c = b.cell & 15; sp.uv[0] = (c % 4) / 4.0f; sp.uv[1] = (c / 4) / 4.0f; sp.uv[2] = sp.uv[0] + 0.25f; sp.uv[3] = sp.uv[1] + 0.25f; }
             scene.sprites.push_back(sp);
         }
@@ -578,7 +602,8 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         const float rate = float(dt) / std::max(0.01f, lit ? tuning::auraFadeIn : tuning::auraFadeOut);
         s.aura = lit ? std::min(1.0f, s.aura + rate) : std::max(0.0f, s.aura - rate);
         scene.blur = s.blur * std::max(0.0f, f->blurStrength);
-        scene.aura = s.aura * tuning::auraOpacity * fx_speed;
+        scene.aura = s.aura * tuning::auraOpacity * fx_speed * std::max(0.0f, f->auraIntensity);
+        scene.aura_thickness = std::max(0.0f, f->auraThickness);
         scene.aura *= 1 - s.ball_amount;   // the aura's bright rim streaked round the ball: the ball has its own glow
         scene.aura_time = float(std::fmod(now, 1000.0));
         // streaks point at Sonic's chest on screen

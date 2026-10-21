@@ -5,6 +5,12 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.9.0
+- Aura du boost plus bleue : un bleu électrique profond au lieu du bleu ciel qui tournait au blanc sur les zones claires ; les traînées d'énergie de la texture restent bleues.
+- Éclairs sur le corps : quand l'aura est allumée (boost, grande vitesse), de petits arcs électriques (texture d'éclair de Frontiers) crépitent sur les bras, les jambes et les piquants de Sonic. Chacun est accroché à un os, donc il suit ses mouvements ; il y en a plus quand il va vite.
+- Labo, nouvel onglet **Aura** : « Aura thickness » (épaisseur autour du corps, ×1), « Aura intensity » (luminosité, ×1), « Aura lightning » (quantité d'éclairs sur le corps, ×1, 0 pour les couper).
+- Correction : en Direct3D 11 comme en Direct3D 12, le défilement de la texture de l'aura et sa conversion de couleur pour l'écran étaient restés dans un commentaire du code ; ils sont de nouveau appliqués.
+
 ## v0.8.2
 - Labo, onglet Boost : « Trail start fade », la longueur du fondu au départ de la traînée derrière Sonic (0 m = départ net, 1 m par défaut, jusqu'à 4 m au curseur).
 - Labo et menu O : chaque valeur affichée à côté d'un curseur se modifie à la main. Un clic sur le chiffre ouvre une case, on tape la valeur, Entrée (ou un clic ailleurs) la garde. Les valeurs tapées peuvent dépasser les limites du curseur (par exemple Jump height ×10).

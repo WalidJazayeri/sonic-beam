@@ -54,6 +54,7 @@ struct Scene {
     float blur_center[2] = {0.5f, 0.5f};   // where streaks point, 0..1 screen coordinates
     float aura = 0;                // 0..1 aura brightness (drawn on Sonic's pose)
     float aura_time = 0;           // seconds, scrolls the aura pattern
+    float aura_thickness = 1;      // Sonic Beam Lab: how far the aura stands off the body (x)
     std::vector<Sprite> sprites;
     // Power Boost trail: world-space triangles, 9 floats per vertex (position, uv, rgba)
     std::vector<float> trail, arcs, beam;

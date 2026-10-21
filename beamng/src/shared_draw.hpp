@@ -89,7 +89,7 @@ float4 psAura(PSIn i) : SV_Target {
     float4 a2 = tex.Sample(wrapS, i.uv * 1.7 + float2(params.y * 0.4, -params.y * 2.1));
     float energy = max(a1.r, max(a1.g, a1.b)) * a1.a * 0.6 + max(a2.r, max(a2.g, a2.b)) * a2.a * 0.6;
     float a = saturate(falloff * (0.25 + energy)) * tint.a;
-    return float4(output(tint.rgb * (0.8 + 0.7 * energy)), a);
+    return float4(output(tint.rgb * (0.75 + 0.45 * energy)), a);   // streaks stay blue
 }
 // Speed blur (Frontiers' boost): the finished BeamNG frame streaks toward Sonic. tint.xy: centre
 // (0..1), tint.z: longest streak. The centre stays sharp; BeamNG's minimap corner is kept sharp.

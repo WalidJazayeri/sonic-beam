@@ -456,8 +456,11 @@ void draw_aura(const game::Scene &scene, int layer)
     draw::mul(scene.sonic_model, scene.view, mv);
     DrawConstants dc{};
     std::memcpy(dc.model_view, mv, 64); std::memcpy(dc.proj, scene.proj, 64);
-    dc.tint[0] = 0.25f; dc.tint[1] = 0.55f; dc.tint[2] = 1.0f; dc.tint[3] = scene.aura * (layer ? 0.35f : 0.6f);
-    dc.params[0] = layer ? -0.085f : -0.03f;  // a close shell and a wider halo (the aura mesh is inside-out: its normals point in) dc.params[1] = scene.aura_time; dc.params[3] = float(r.color_mode);
+    // deep electric blue (a sky blue added onto bright pixels turned white)
+    dc.tint[0] = 0.04f; dc.tint[1] = 0.28f; dc.tint[2] = 1.0f; dc.tint[3] = scene.aura * (layer ? 0.35f : 0.6f);
+    // a close shell and a wider halo, pushed out by the Lab's Aura thickness (the mesh is inside-out: its normals point in)
+    dc.params[0] = (layer ? -0.085f : -0.03f) * scene.aura_thickness;
+    dc.params[1] = scene.aura_time; dc.params[3] = float(r.color_mode);
     bind_constants(dc);
     const float factor[4] = {};
     r.context->OMSetBlendState(r.blend_add, factor, 0xffffffff);

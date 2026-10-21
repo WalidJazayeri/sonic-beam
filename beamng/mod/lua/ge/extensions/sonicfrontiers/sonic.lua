@@ -50,6 +50,9 @@ typedef struct {
   float lightning;
   float fxSpeedAmount;
   float fxRefKmh;
+  float auraThickness;
+  float auraIntensity;
+  float auraLightning;
   float trailFade;
   int32_t jumpStyle;
   float ballSpin;
@@ -116,6 +119,7 @@ local settings = {
   shadowOpacity = 0.55, -- Sonic's shadow
   trailLength = 1, trailIntensity = 1, lightning = 1,   -- Power Boost trail and lightning
   trailFade = 1,                                       -- metres over which the trail fades in behind Sonic
+  auraThickness = 1, auraIntensity = 1, auraLightning = 1,   -- boost aura on Sonic's body, and its lightning
   fxBySpeed = true, fxSpeedAmount = 0.75,              -- trail, lightning and aura grow with Sonic's speed
   blurStrength = 1,                                    -- speed blur multiplier
   -- jump: 0 ball the whole jump, 1 ball going up then tricks, 2 ball with tricks on a direction
@@ -175,6 +179,9 @@ local function openLab(tab)
     trailIntensity = im.FloatPtr(settings.trailIntensity),
     lightning = im.FloatPtr(settings.lightning),
     trailFade = im.FloatPtr(settings.trailFade),
+    auraThickness = im.FloatPtr(settings.auraThickness),
+    auraIntensity = im.FloatPtr(settings.auraIntensity),
+    auraLightning = im.FloatPtr(settings.auraLightning),
     fxBySpeed = im.BoolPtr(settings.fxBySpeed),
     fxSpeedAmount = im.FloatPtr(settings.fxSpeedAmount),
     blurStrength = im.FloatPtr(settings.blurStrength),
@@ -303,6 +310,13 @@ local function drawLab()
       if not w.fxBySpeed[0] then im.EndDisabled() end
       im.Spacing()
       labSlider('Speed blur strength', w.blurStrength, 'blurStrength', 0, 2, timesText, 1, 'x1')
+      im.EndTabItem()
+    end
+    if labTab('Aura') then
+      im.TextUnformatted('The blue aura on Sonic while he boosts or runs fast:')
+      labSlider('Aura thickness', w.auraThickness, 'auraThickness', 0, 3, timesText, 1, 'x1')
+      labSlider('Aura intensity', w.auraIntensity, 'auraIntensity', 0, 2, timesText, 1, 'x1')
+      labSlider('Aura lightning', w.auraLightning, 'auraLightning', 0, 3, timesText, 1, 'x1')
       im.EndTabItem()
     end
     if labTab('Jump') then
@@ -731,6 +745,9 @@ sendFrame = function()
   frame.lightning = settings.lightning
   frame.fxSpeedAmount = settings.fxBySpeed and settings.fxSpeedAmount or 0
   frame.fxRefKmh = fxReferenceKmh()
+  frame.auraThickness = settings.auraThickness
+  frame.auraIntensity = settings.auraIntensity
+  frame.auraLightning = settings.auraLightning
   frame.trailFade = settings.trailFade
   frame.jumpStyle = settings.jumpStyle
   frame.ballSpin = settings.ballSpin

@@ -32,6 +32,12 @@ bool load_all()
     if (!sonic_pac.load(root + L"\\" + sheets::sonic_model.archive, error)) { mod::log("assets: %ls: %s", sheets::sonic_model.archive, error.c_str()); return false; }
     if (!frontiers::parse_model(sonic_pac, sheets::sonic_model.entry, data.sonic, error)) { mod::log("assets: Sonic model: %s", error.c_str()); return false; }
     data.sonic_height = std::max(0.1f, data.sonic.max[1] - data.sonic.min[1]);
+    data.bone_rest.assign(data.sonic.nodes.size() * 3, 0.0f);
+    for (size_t n = 0; n < data.sonic.nodes.size(); ++n) {
+        float bind[16];
+        if (!frontiers::math4::inverse_affine(data.sonic.nodes[n].inverse_bind, bind)) continue;
+        data.bone_rest[n * 3] = bind[3]; data.bone_rest[n * 3 + 1] = bind[7]; data.bone_rest[n * 3 + 2] = bind[11];
+    }
     frontiers::Skeleton skeleton;
     const frontiers::PacEntry *skl = sonic_pac.find(sheets::sonic_skeleton.entry);
     if (!skl || !frontiers::parse_skeleton(*skl, skeleton, error)) { mod::log("assets: skeleton: %s", error.c_str()); return false; }
