@@ -58,6 +58,8 @@ typedef struct {
   int32_t water;
   float waterZ;
   float impact;
+  int32_t wall;
+  float wallNormal[3];
   float trailFade;
   int32_t jumpStyle;
   float ballSpin;
@@ -85,6 +87,8 @@ local runnerBoost, runnerGrounded, pendingJumps = 0, 0, 0
 local runnerWantsMove, runnerSurface = 0, 0
 local runnerAirInput = 0          -- direction held in the air (1 left, 2 right, 3 back): tricks
 local runnerWater = 0             -- 1 running on water, 2 swimming
+local runnerWall = 0              -- 1 running up a wall, 2/3 along it (wall on his left/right)
+local runnerWallN = {0, 0, 1}     -- the wall's normal
 local carMass = {}                -- vehicle id -> kg (reported by the vehicle's sonicfrontiers_impact)
 local impactLoaded = {}           -- vehicle id -> the impact extension was loaded into it
 local impactCooldown = {}         -- vehicle id -> clock before it can be hit again
@@ -166,6 +170,7 @@ local settings = {
   auraBodyShape = false,                                      -- false: lying along the run, round in front; true: hugs his body
   auraLength = 1,                                             -- how far the aura streams back behind him
   runOnWater = true, waterRunKmh = 80, swimKmh = 8,           -- water: run on it from this speed, else swim
+  runOnWalls = true, wallRunKmh = 120, wallGrip = 3,          -- walls: boosting into one from this speed, for this long
   fxBySpeed = true, fxSpeedAmount = 0.75,              -- trail, lightning and aura grow with Sonic's speed
   blurStrength = 1,                                    -- speed blur multiplier
   -- jump: 0 ball the whole jump, 1 ball going up then tricks, 2 ball with tricks on a direction
@@ -236,6 +241,9 @@ local function openLab(tab)
     runOnWater = im.BoolPtr(settings.runOnWater),
     waterRunKmh = im.FloatPtr(settings.waterRunKmh),
     swimKmh = im.FloatPtr(settings.swimKmh),
+    runOnWalls = im.BoolPtr(settings.runOnWalls),
+    wallRunKmh = im.FloatPtr(settings.wallRunKmh),
+    wallGrip = im.FloatPtr(settings.wallGrip),
     fxBySpeed = im.BoolPtr(settings.fxBySpeed),
     fxSpeedAmount = im.FloatPtr(settings.fxSpeedAmount),
     blurStrength = im.FloatPtr(settings.blurStrength),
@@ -392,6 +400,16 @@ local function drawLab()
       if labSlider('Water run speed', w.waterRunKmh, 'waterRunKmh', 20, 300, kmhText, 80, '80') then settingsSent = nil end
       if not w.runOnWater[0] then im.EndDisabled() end
       if labSlider('Swim speed', w.swimKmh, 'swimKmh', 2, 30, kmhText, 8, '8') then settingsSent = nil end
+      im.EndTabItem()
+    end
+    if labTab('Wall') then
+      im.TextUnformatted('Boosting into a steep wall, Sonic runs on it: up when he meets it head on, along it otherwise.')
+      im.TextUnformatted('Release the boost to drop off; jump to leap away from it.')
+      if im.Checkbox('Run on walls', w.runOnWalls) then settings.runOnWalls = w.runOnWalls[0]; settingsSent = nil end
+      if not w.runOnWalls[0] then im.BeginDisabled(true) end
+      if labSlider('Wall run speed', w.wallRunKmh, 'wallRunKmh', 40, 400, kmhText, 120, '120') then settingsSent = nil end
+      if labSlider('Wall grip', w.wallGrip, 'wallGrip', 0.5, 10, function(x) return string.format('%.1f s', x) end, 3, '3 s') then settingsSent = nil end
+      if not w.runOnWalls[0] then im.EndDisabled() end
       im.EndTabItem()
     end
     if labTab('Impact') then
@@ -758,10 +776,12 @@ local function setSonicCamera(on)
 end
 
 -- called by the runner inside the walking body, every graphics frame
-local function onRunner(boost, jumps, grounded, wantsMove, surface, airInput, water)
+local function onRunner(boost, jumps, grounded, wantsMove, surface, airInput, water, wall, nx, ny, nz)
   runnerBoost, runnerGrounded, runnerWantsMove, runnerSurface = boost, grounded, wantsMove or 0, surface or 0
   runnerAirInput = airInput or 0
   runnerWater = water or 0
+  runnerWall = wall or 0
+  runnerWallN = {nx or 0, ny or 0, nz or 1}
   pendingJumps = pendingJumps + jumps
 end
 
@@ -808,9 +828,10 @@ local function onPreRender(dtReal, dtSim)
     end
     if settingsSent ~= id then
       settingsSent = id
-      unicycle:queueLuaCommand(string.format('if sonicfrontiers_runner then sonicfrontiers_runner.setSpeedSettings(%s, %f, %f, %f, %s, %f, %f) end',
+      unicycle:queueLuaCommand(string.format('if sonicfrontiers_runner then sonicfrontiers_runner.setSpeedSettings(%s, %f, %f, %f, %s, %f, %f, %s, %f, %f) end',
         tostring(settings.speedCapOn), settings.speedCapKmh, settings.boostRampKmhPerSecond, settings.jumpHeight,
-        tostring(settings.runOnWater), settings.waterRunKmh, settings.swimKmh))
+        tostring(settings.runOnWater), settings.waterRunKmh, settings.swimKmh,
+        tostring(settings.runOnWalls), settings.wallRunKmh, settings.wallGrip))
     end
     if autopilotSent ~= testMode then
       autopilotSent = testMode
@@ -916,6 +937,8 @@ sendFrame = function()
   frame.water = runnerWater
   frame.waterZ = sentWaterZ or -100000
   frame.impact = pendingImpact
+  frame.wall = runnerWall
+  frame.wallNormal[0], frame.wallNormal[1], frame.wallNormal[2] = runnerWallN[1], runnerWallN[2], runnerWallN[3]
   pendingImpact = 0
   frame.trailFade = settings.trailFade
   frame.jumpStyle = settings.jumpStyle

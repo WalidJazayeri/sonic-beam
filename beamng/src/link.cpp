@@ -34,7 +34,9 @@ struct Packet {
     int32_t auraBody;
     float auraLength;
     int32_t water;
-    float waterZ, impact, trailFade;
+    float waterZ, impact;
+    int32_t wall;
+    float wallNormal[3], trailFade;
     int32_t jumpStyle;
     float ballSpin, ballGlow, blurStrength;
     int32_t airInput;
@@ -80,7 +82,7 @@ DWORD WINAPI listener(void *)
         f.shadowOpacity = p.shadowOpacity; f.hasGround = p.hasGround;
         f.trailLength = p.trailLength; f.trailIntensity = p.trailIntensity; f.lightning = p.lightning;
         f.fxSpeedAmount = p.fxSpeedAmount; f.fxRefKmh = p.fxRefKmh;
-        f.auraThickness = p.auraThickness; f.auraIntensity = p.auraIntensity; f.auraLightning = p.auraLightning; f.auraBody = p.auraBody; f.auraLength = p.auraLength; f.water = p.water; f.waterZ = p.waterZ; f.impact = p.impact;
+        f.auraThickness = p.auraThickness; f.auraIntensity = p.auraIntensity; f.auraLightning = p.auraLightning; f.auraBody = p.auraBody; f.auraLength = p.auraLength; f.water = p.water; f.waterZ = p.waterZ; f.impact = p.impact; f.wall = p.wall; std::memcpy(f.wallNormal, p.wallNormal, 12);
         f.trailFade = p.trailFade; f.jumpStyle = p.jumpStyle; f.ballSpin = p.ballSpin; f.ballGlow = p.ballGlow; f.blurStrength = p.blurStrength; f.airInput = p.airInput;
         f.ringCount = count; f.ringPos = rings.data();
         sb_frame(&f);

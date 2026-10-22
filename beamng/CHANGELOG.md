@@ -5,6 +5,10 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.12.0
+- Course sur les murs : en boost, assez vite contre une paroi raide (immeuble, falaise, mur de tunnel), Sonic court dessus avec les animations `wallrun` de Frontiers, debout sur le mur. De face, il monte tout droit ; en arrivant de biais, il grimpe d'abord en diagonale sur la paroi puis court le long du mur à l'horizontale (le stick l'oriente un peu vers le haut ou le bas). Il faut un vrai mur (au moins 1,5 m au-dessus de lui), pas une bordure. Il tient tant qu'il boost et que sa prise dure ; sinon il retombe. S'il dépasse le haut du mur en montant, il bascule par-dessus avec un petit saut et atterrit dessus ; un saut le fait bondir loin du mur.
+- Labo, nouvel onglet **Wall** : « Run on walls » (case), « Wall run speed » (120 km/h), « Wall grip » (3 s).
+
 ## v0.11.0
 - Collisions avec les véhicules (trafic, voitures garées, la sienne) : chaque image, le trajet de Sonic est testé contre la boîte de chaque véhicule, avec 0,08 s d'avance sur sa course (la collision normale de BeamNG arrête son corps léger dès le contact : le choc doit partir juste avant, à pleine vitesse). À l'impact, il donne au véhicule l'élan d'une masse de 1000 kg × « Impact force » : le véhicule est projeté, et poussé plus fort autour du point d'impact pour que la carrosserie s'écrase (extension de véhicule `sonicfrontiers_impact`, qui donne aussi la masse du véhicule). Éclair et éclats électriques de Frontiers au point d'impact, bang supersonique au-delà de 120 km/h.
 - Labo, nouvel onglet **Impact** : ce que fait Sonic au choc (une case cochée à la fois) :

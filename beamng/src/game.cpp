@@ -210,7 +210,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     }
 
     // ---------------- motion of Sonic's body
-    V3 vh = v3(f->vel); vh.z = 0;
+    V3 vh = v3(f->vel); if (!f->wall) vh.z = 0;   // on a wall he runs up it too
     if (!f->onFoot || !(length(vh) < 1e6f)) vh = {};   // in a car, or a teleport: not Sonic running
     const float speed = length(vh) * 3.6f;
     s.speed_kmh += (speed - s.speed_kmh) * (1 - std::exp(-float(dt) / tuning::speedSmoothing));
@@ -231,7 +231,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         if (!s.heading_set) { s.heading = std::atan2(fwd.y, fwd.x); s.heading_set = true; }
     }
     const bool was_air = s.air;
-    if (f->grounded || f->water == 2) { s.ground_lost = 0; s.air = false; }   // swimming is not flying
+    if (f->grounded || f->water == 2 || f->wall) { s.ground_lost = 0; s.air = false; }   // swimming or on a wall is not flying
     else { s.ground_lost += dt; if (s.ground_lost > 0.12) s.air = true; }
     if (s.air) s.air_time = was_air ? s.air_time + dt : s.ground_lost;
     const bool landed = was_air && !s.air;
@@ -339,7 +339,11 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         if (s.air_trick == -2 && f->airInput == 0) s.air_trick = -1;
         if (s.air_trick >= 0) { ball_now = false; want = Anim(s.air_trick); }
     }
-    if (f->water == 2) {
+    if (f->wall) {
+        // Frontiers' wall run: up the wall, or along it with the wall on his left or right
+        want = f->wall == 1 ? Anim::wall_up : f->wall == 2 ? Anim::wall_left : Anim::wall_right;
+        ball_now = false;
+    } else if (f->water == 2) {
         want = Anim::swim;   // out of his depth and too slow to run on the water
         ball_now = false;
     } else if (ball_now) {
@@ -397,6 +401,12 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         }
         const V3 drawn_feet = feet;
         M4 sonic = mul(rot_z(-s.lean), basis(r * -k, upz * k, face * k, drawn_feet));
+        if (f->wall) {
+            const V3 wn = norm(v3(f->wallNormal));
+            V3 run = v3(f->vel) - wn * dot(v3(f->vel), wn);
+            run = length(run) > 0.5f ? norm(run) : norm(upz - wn * dot(upz, wn));
+            sonic = basis(cross(run, wn) * -k, wn * k, run * k, feet);
+        }
         // the jump ball: Sonic rolls forward around the middle of the ball, inside Frontiers' spin shell
         const bool rolling = ball_now && s.player.anim == int(Anim::ball);
         s.ball_amount += ((rolling ? 1.0f : 0.0f) - s.ball_amount) * std::min(1.0f, float(dt) * (rolling ? 14 : 10));
@@ -451,7 +461,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         const float fade = std::max(0.0f, 1 - height / tuning::shadowFadeMeters);
         const V3 sun = norm(v3(f->toSun));
         const float sun_up = std::max(0.0f, std::min(1.0f, (sun.z - tuning::shadowSunMin) / 0.15f));
-        if (sun_up > 0 && opacity > 0 && fade > 0) {
+        if (sun_up > 0 && opacity > 0 && fade > 0 && !f->wall) {
             // planar projection along the light: p' = p - L (n.p + dd) / (n.L), L = -sun
             const V3 L = sun * -1.0f;
             const float nl = dot(gn, L);

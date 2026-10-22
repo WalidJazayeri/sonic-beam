@@ -54,6 +54,15 @@ local ballZ = 0                   -- height of the ball's centre
 local waterState = 0              -- 0 none, 1 running on the water, 2 swimming
 local lastWaterState = 0
 local lastGrounded = true
+-- wall run (Sonic Beam Lab, Wall): boosting fast into a steep wall, he runs on it - up when he
+-- meets it head on, along it otherwise - until the boost stops, the wall ends or his grip runs out
+local wallRunOn, wallRunMs, wallGrip = true, 120 / 3.6, 3
+local wallState = 0               -- 0 none, 1 up, 2 along (wall on his left), 3 along (wall on his right)
+local wallN = vec3(0, 0, 1)       -- the wall's normal (away from it)
+local wallDir = vec3(0, 0, 1)     -- where he runs on it
+local wallSpeed, wallTime, wallCooldown = 0, 0, 0
+local wallKick = nil              -- velocity added once when he leaves the wall
+local leaveWall, wallStep
 local debugInfo = {}           -- last physics step, for the developer probe M.getDebug
 
 local function wrapPlayerController()
@@ -218,6 +227,27 @@ local function onPhysicsStep(dt)
   local vh = vec3(vel.x, vel.y, 0)
   local speed = vh:length()
   local dir, amount = inputDirection()
+  if wallKick then applyAccelEverywhere(wallKick / dt); wallKick = nil end
+  if wallState ~= 0 then
+    -- running on the wall: gravity cancelled, held against it, carried along wallDir at wallSpeed
+    wallSpeed = wallSpeed + boostRamp * dt
+    if speedCapOn then wallSpeed = math.min(wallSpeed, speedCapMs) end
+    if wallState ~= 1 and wallTime > 0.35 then
+      -- along the wall: level out after the first climb onto it
+      local level = wallDir - up * up:dot(wallDir)
+      if level:length() > 0.1 then wallDir = (wallDir + (level:normalized() - wallDir) * math.min(1, 3 * dt)):normalized() end
+    end
+    if dir:length() > 0.1 and wallState ~= 1 then
+      -- along the wall the stick steers up and down a little
+      local lift = clamp(dir:dot(wallDir:cross(wallN)), -1, 1)
+      wallDir = (wallDir + up * (lift * 0.6 * dt)):normalized()
+    end
+    local a = (wallDir * wallSpeed - vel) * P.wallGain - wallN * P.wallStick + up * 9.81
+    applyAccelEverywhere(a)
+    setGlide(true)
+    setWalkerSpeed(speed)
+    return
+  end
   local swimming = waterState == 2
   local boosting = boostHeld > 0.5 and amount > 0.1 and not swimming
   local a
@@ -283,6 +313,75 @@ local function onPhysicsStep(dt)
   debugInfo.boosting, debugInfo.grounded, debugInfo.walker, debugInfo.gliding = boosting, grounded, walker ~= nil, gliding
 end
 
+-- a steep surface `reach` metres or less along dir from origin: its normal (towards origin) and distance,
+-- from three rays a little apart
+local function wallAt(origin, dir, reach)
+  local d = obj:castRayStatic(origin, dir, reach)
+  if not d or d >= reach then return nil end
+  local side = dir:cross(up)
+  if side:length() < 1e-3 then side = vec3(1, 0, 0) end
+  side:normalize()
+  local lift = side:cross(dir):normalized()
+  local o1, o2 = origin + side * 0.3, origin + lift * 0.3
+  local d1, d2 = obj:castRayStatic(o1, dir, reach + 1), obj:castRayStatic(o2, dir, reach + 1)
+  if not d1 or not d2 or d1 >= reach + 1 or d2 >= reach + 1 then return nil end
+  local p0 = origin + dir * d
+  local n = (o1 + dir * d1 - p0):cross(o2 + dir * d2 - p0)
+  if n:length() < 1e-6 then return nil end
+  n:normalize()
+  if n:dot(dir) > 0 then n = -n end
+  return n, d
+end
+
+leaveWall = function(kick)
+  wallState, wallCooldown, wallKick = 0, 0.6, kick
+end
+
+wallStep = function(dt, vel)
+  wallCooldown = math.max(0, wallCooldown - dt)
+  if not ballCenter then return end
+  local c = obj:getPosition() + obj:getNodePosition(ballCenter)
+  local _, amount = inputDirection()
+  local boosting = boostHeld > 0.5 and amount > 0.1
+  if wallState == 0 then
+    if not (wallRunOn and boosting and wallCooldown <= 0 and waterState ~= 2) then return end
+    local vh = vec3(vel.x, vel.y, 0)
+    local sp = vh:length()
+    if sp < wallRunMs then return end
+    local dirH = vh / sp
+    local reach = ballRadius + 0.6 + sp * 0.06
+    local n = wallAt(c, dirH, reach)
+    if not n or math.abs(n.z) > P.wallMaxSlope then return end
+    -- a wall, not a kerb: it still stands in front of his chest
+    local high = obj:castRayStatic(c + up * P.wallMinHeight, dirH, reach + 1)
+    if not high or high >= reach + 1 then return end
+    wallN, wallTime, wallSpeed = n, 0, vel:length()
+    if -n:dot(dirH) > P.wallHeadOn then
+      wallState, wallDir = 1, (up - n * n:dot(up)):normalized()   -- head on: straight up
+    else
+      local along = dirH - n * n:dot(dirH)
+      along.z = 0
+      -- he runs up onto the wall at a slant first, then levels out along it (physics step)
+      wallDir = (along:normalized() + up * P.wallAlongLift):normalized()
+      wallState = (-n):dot(wallDir:cross(up)) > 0 and 3 or 2         -- 3: the wall is on his right
+    end
+    log('D', 'sonicfrontiers', string.format('wall run %d at %.0f km/h', wallState, wallSpeed * 3.6))
+    return
+  end
+  wallTime = wallTime + dt
+  local n = wallAt(c, -wallN, ballRadius + 1.2)
+  if n and math.abs(n.z) <= P.wallMaxSlope + 0.15 then
+    wallN = (wallN * 0.8 + n * 0.2):normalized()
+    wallDir = (wallDir - wallN * wallN:dot(wallDir)):normalized()
+  end
+  if not n and wallState == 1 then
+    -- over the top: a little hop onto what is up there, his climbing speed turned forward
+    leaveWall(-wallN * (P.wallTopPush + wallSpeed * 0.5) + up * (P.wallTopHop - vel.z))
+  elseif not n or not wallRunOn or not boosting or wallTime > wallGrip then
+    leaveWall(wallN * 3)                             -- falls away from the wall
+  end
+end
+
 local function surfaceIndex()
   if not groundMaterial then return 0 end
   if not materialNames then
@@ -341,6 +440,14 @@ local function updateGFX(dt)
     if grounded then break end
     if obj:isNodeColliding(cid) then grounded = true end
   end
+  wallStep(dt, vel)
+  if wallState ~= 0 then grounded = true end
+  if jumpQueued and wallState ~= 0 then
+    -- a jump off the wall: pushed away from it and up
+    jumpQueued = false
+    leaveWall(wallN * P.wallJump + up * (P.wallJump * 0.6))
+    jumpsToReport = jumpsToReport + 1
+  end
   if jumpQueued then jumpWait = 0.25; jumpQueued = false end
   if jumpWait > 0 then
     jumpWait = jumpWait - dt   -- a press waits a moment for the ground rather than being lost
@@ -361,8 +468,9 @@ local function updateGFX(dt)
   if walkX < -0.5 then airInput = 1 elseif walkX > 0.5 then airInput = 2 elseif walkY < -0.5 then airInput = 3 end
   if waterState == 2 then boosting = 0 end
   lastGrounded = grounded
-  obj:queueGameEngineLua(string.format('if sonicfrontiers_sonic then sonicfrontiers_sonic.onRunner(%d, %d, %d, %d, %d, %d, %d) end',
-    boosting, jumpsToReport, grounded and 1 or 0, amount > 0.1 and 1 or 0, waterState ~= 0 and SURFACE.WATER or surfaceIndex(), airInput, waterState))
+  obj:queueGameEngineLua(string.format('if sonicfrontiers_sonic then sonicfrontiers_sonic.onRunner(%d, %d, %d, %d, %d, %d, %d, %d, %.3f, %.3f, %.3f) end',
+    boosting, jumpsToReport, grounded and 1 or 0, amount > 0.1 and 1 or 0, waterState ~= 0 and SURFACE.WATER or surfaceIndex(), airInput, waterState,
+    wallState, wallN.x, wallN.y, wallN.z))
   jumpsToReport = 0
 end
 
@@ -406,7 +514,10 @@ M.setEnabled = function(on)
   end
   log('I', 'sonicfrontiers', on and 'Sonic takes over the walking body' or 'walking body handed back to BeamNG')
 end
-M.setSpeedSettings = function(capOn, capKmh, rampKmhPerSecond, jumpHeight, runOnWater, waterRunKmh, swimKmh)
+M.setSpeedSettings = function(capOn, capKmh, rampKmhPerSecond, jumpHeight, runOnWater, waterRunKmh, swimKmh, runOnWalls, wallRunKmh, wallGripSeconds)
+  if runOnWalls ~= nil then wallRunOn = runOnWalls and true or false end
+  wallRunMs = math.max(0, wallRunKmh or 120) / 3.6
+  wallGrip = math.max(0.2, wallGripSeconds or 3)
   if runOnWater ~= nil then waterRunOn = runOnWater and true or false end
   waterRunMs = math.max(0, waterRunKmh or 80) / 3.6
   swimMs = math.max(0.5, swimKmh or 8) / 3.6

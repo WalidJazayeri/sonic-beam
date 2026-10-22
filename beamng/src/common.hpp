@@ -51,6 +51,8 @@ extern "C" struct SbFrame {
     int32_t water;                     // 1 running on water, 2 swimming
     float waterZ;                      // height of the water's surface under Sonic (when water != 0)
     float impact;                      // Sonic hit a vehicle this frame: closing speed (m/s), else 0
+    int32_t wall;                      // 1 running up a wall, 2/3 along it (wall on his left/right), else 0
+    float wallNormal[3];               // that wall's normal (away from it)
     float trailFade;                   // Sonic Beam Lab: metres over which the trail fades in behind Sonic (0: no fade)
     int32_t jumpStyle;                 // Sonic Beam Lab, Jump: 0 ball the whole jump, 1 ball up then tricks, 2 ball, tricks on a direction
     float ballSpin, ballGlow;          // Sonic Beam Lab, Jump: ball turns per second, blue glow (0 none, 1 default)

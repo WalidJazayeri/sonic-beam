@@ -28,6 +28,9 @@
     {"id": "land",        "clip": "chr_sonic@jump_e.anm.pxd",       "loop": false, "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.08, "verified": false},
     {"id": "jump_start",  "clip": "chr_sonic@jump_s.anm.pxd",       "loop": false, "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.06, "verified": false},
     {"id": "ball",        "clip": "chr_sonic@ball_loop.anm.pxd",    "loop": true,  "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.08, "verified": false},
-    {"id": "swim",        "clip": "chr_sonic@walk_loop.anm.pxd", "loop": true, "rate": "fixed", "refKmh": 0,  "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.25, "verified": false}
+    {"id": "swim",        "clip": "chr_sonic@walk_loop.anm.pxd", "loop": true, "rate": "fixed", "refKmh": 0,  "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.25, "verified": false},
+    {"id": "wall_up",     "clip": "chr_sonic@wallrun_u_loop.anm.pxd", "loop": true, "rate": "speed", "refKmh": 32, "minRate": 0.9, "maxRate": 3.2, "blendSeconds": 0.12, "verified": false},
+    {"id": "wall_left",   "clip": "chr_sonic@wallrun_l_loop.anm.pxd", "loop": true, "rate": "speed", "refKmh": 32, "minRate": 0.9, "maxRate": 3.2, "blendSeconds": 0.12, "verified": false},
+    {"id": "wall_right",  "clip": "chr_sonic@wallrun_r_loop.anm.pxd", "loop": true, "rate": "speed", "refKmh": 32, "minRate": 0.9, "maxRate": 3.2, "blendSeconds": 0.12, "verified": false}
   ]
 }
