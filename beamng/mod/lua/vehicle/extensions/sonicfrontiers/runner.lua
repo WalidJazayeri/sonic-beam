@@ -53,6 +53,7 @@ local waterZ = nil                -- height of the water surface under Sonic (fr
 local ballZ = 0                   -- height of the ball's centre
 local waterState = 0              -- 0 none, 1 running on the water, 2 swimming
 local lastWaterState = 0
+local lastGrounded = true
 local debugInfo = {}           -- last physics step, for the developer probe M.getDebug
 
 local function wrapPlayerController()
@@ -256,8 +257,12 @@ local function onPhysicsStep(dt)
   if waterState ~= 0 then
     -- the water carries him: a spring holds the ball just touching it (running) or chest-deep (swimming)
     local target = swimming and (waterZ - P.swimDepth) or (waterZ + ballRadius - P.waterRunDepth)
-    local lift = clamp(P.waterSpring * (target - ballZ), -P.waterSpring, P.waterSpring) - vel.z * P.waterDamping
+    local spring = swimming and P.waterSpring * 0.4 or P.waterSpring   -- floating gently, no bobbing
+    local lift = clamp(spring * (target - ballZ), -spring, spring) - vel.z * P.waterDamping * (swimming and 1.5 or 1)
     a = a + up * (9.81 + lift)
+    -- landing on the water while running: stop the plunge at once (deep under it, BeamNG's water drag
+    -- on the soft body killed his speed)
+    if not swimming and vel.z < 0 then a = a - up * (vel.z * P.waterLandDamping) end
   elseif grounded then
     a = a - up * math.min(P.maxDownforce, P.downforce * speed * speed)
   else
@@ -317,10 +322,14 @@ local function updateGFX(dt)
     ballZ = c.z
     if c.z - ballRadius < waterZ + 0.3 then
       -- out of his depth when the bottom is further below the surface than he is tall
-      local reach = P.waterFooting + 0.05
-      local d = obj:castRayStatic(vec3(c.x, c.y, waterZ + 0.05), vec3(0, 0, -1), reach)
+      -- the bottom under him, looked for from above (from the surface, a ray starting inside a
+      -- beach saw nothing and he swam on dry land)
+      local from = math.max(c.z, waterZ) + 1
+      local reach = from - (waterZ - P.waterFooting)
+      local d = obj:castRayStatic(vec3(c.x, c.y, from), vec3(0, 0, -1), reach)
       if not (d and d < reach) then
-        local fast = waterRunOn and (speedH > waterRunMs or (lastWaterState == 1 and speedH > waterRunMs * 0.85))
+        -- already running on it, or landing on it from a jump: 85 % of the speed keeps him running
+        local fast = waterRunOn and (speedH > waterRunMs or ((lastWaterState == 1 or not lastGrounded) and speedH > waterRunMs * 0.85))
         waterState = fast and 1 or 2
       end
     end
@@ -352,6 +361,7 @@ local function updateGFX(dt)
   local airInput = 0
   if walkX < -0.5 then airInput = 1 elseif walkX > 0.5 then airInput = 2 elseif walkY < -0.5 then airInput = 3 end
   if waterState == 2 then boosting = 0 end
+  lastGrounded = grounded
   obj:queueGameEngineLua(string.format('if sonicfrontiers_sonic then sonicfrontiers_sonic.onRunner(%d, %d, %d, %d, %d, %d, %d) end',
     boosting, jumpsToReport, grounded and 1 or 0, amount > 0.1 and 1 or 0, waterState ~= 0 and SURFACE.WATER or surfaceIndex(), airInput, waterState))
   jumpsToReport = 0

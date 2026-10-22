@@ -56,6 +56,7 @@ typedef struct {
   int32_t auraBody;
   float auraLength;
   int32_t water;
+  float waterZ;
   float trailFade;
   int32_t jumpStyle;
   float ballSpin;
@@ -815,6 +816,7 @@ sendFrame = function()
   frame.auraBody = settings.auraBodyShape and 1 or 0
   frame.auraLength = settings.auraLength
   frame.water = runnerWater
+  frame.waterZ = sentWaterZ or -100000
   frame.trailFade = settings.trailFade
   frame.jumpStyle = settings.jumpStyle
   frame.ballSpin = settings.ballSpin

@@ -179,6 +179,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     scene.aura = 0;
     scene.ball_visible = false;
     scene.sonic_hidden = false;
+    std::memset(scene.clip_plane, 0, sizeof(scene.clip_plane));
     const double dt = s.last_frame ? std::min(0.1, now - s.last_frame) : 0.016;
     s.last_frame = now;
     if (!d) {
@@ -221,7 +222,8 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         float delta = target - s.heading;
         while (delta > kPi) delta -= 2 * kPi;
         while (delta < -kPi) delta += 2 * kPi;
-        const float step = delta * std::min(1.0f, float(dt) * tuning::facingRate);
+        // swimming: turn slowly (waves and pushes made him spin at a crawl)
+        const float step = delta * std::min(1.0f, float(dt) * tuning::facingRate * (f->water == 2 ? 0.2f : 1.0f));
         s.heading += step;
         s.turn_rate += (step / float(std::max(dt, 1e-3)) - s.turn_rate) * std::min(1.0f, float(dt) * 6);
     } else {
@@ -371,13 +373,20 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
     const float spin = float(std::fmod(now * 3.0, 2 * kPi));
     if (f->onFoot) {
         // Drift clips already lean; only add our lean to the other states.
-        const float target_lean = drifting ? 0.0f : std::max(-1.0f, std::min(1.0f, (s.turn_rate / kDeg) / 90.0f)) * tuning::leanDegrees * kDeg;
+        const float target_lean = (drifting || f->water == 2) ? 0.0f : std::max(-1.0f, std::min(1.0f, (s.turn_rate / kDeg) / 90.0f)) * tuning::leanDegrees * kDeg;
         s.lean += (target_lean - s.lean) * std::min(1.0f, float(dt) * 8);
         const float k = tuning::sonicHeightMeters / d->sonic_height;
         const V3 face{std::cos(s.heading), std::sin(s.heading), 0}, upz{0, 0, 1};
         const V3 r = cross(face, upz);
-        // swimming: drawn lower, half in the water
-        const V3 drawn_feet = f->water == 2 ? feet - upz * tuning::swimDrop : feet;
+        // swimming: cut at the water's surface (the renderer clips him there); his height is set below
+        if (f->water == 2) {
+            const float n[3] = {view.m[8], view.m[9], view.m[10]};   // world up (0, 0, 1) in view space: the view matrix's z row
+            const V3 on{feet.x, feet.y, f->waterZ};
+            const float q[3] = {dot(on, axes[0]) + view.m[12], dot(on, axes[1]) + view.m[13], dot(on, axes[2]) + view.m[14]};
+            for (int a = 0; a < 3; ++a) scene.clip_plane[a] = n[a];
+            scene.clip_plane[3] = -(n[0] * q[0] + n[1] * q[1] + n[2] * q[2]);
+        }
+        const V3 drawn_feet = feet;
         M4 sonic = mul(rot_z(-s.lean), basis(r * -k, upz * k, face * k, drawn_feet));
         // the jump ball: Sonic rolls forward around the middle of the ball, inside Frontiers' spin shell
         const bool rolling = ball_now && s.player.anim == int(Anim::ball);
@@ -411,6 +420,17 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
             sample(d->clips[s.player.prev], animations[s.player.prev].loop, s.player.prev_time, s.scratch.data());
             const float w = float(s.player.blend);
             for (uint32_t i = 0; i < n; ++i) scene.pose[i] = s.scratch[i] + (scene.pose[i] - s.scratch[i]) * w;
+        }
+        // swimming: lift or sink him so the water line crosses his body at swimLine of its height
+        // (whatever the pose), measured on his bones in this frame's pose
+        if (f->water == 2 && !d->bone_rest.empty()) {
+            float lo = 1e9f, hi = -1e9f;
+            for (size_t b = 0; b * 3 + 2 < d->bone_rest.size() && b * 12 + 11 < scene.pose.size(); ++b) {
+                const float *m = &scene.pose[b * 12], *rest = &d->bone_rest[b * 3];
+                const float y = m[4] * rest[0] + m[5] * rest[1] + m[6] * rest[2] + m[7];   // model y is up
+                lo = std::min(lo, y); hi = std::max(hi, y);
+            }
+            if (hi > lo) scene.sonic_model[14] = f->waterZ - k * (lo + (hi - lo) * tuning::swimLine);
         }
         // Shadow: Sonic flattened onto the ground under him along the sun (BeamNG's sky), on the
         // ground's slope, fading as he rises; a soft round one when the sun is low or at night.

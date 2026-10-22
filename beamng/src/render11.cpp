@@ -328,6 +328,7 @@ void bind_draw(const float *model_view, const float *proj, float alpha, float cl
     std::memcpy(dc.proj, proj, 64);
     dc.tint[0] = dc.tint[1] = dc.tint[2] = 1; dc.tint[3] = alpha;
     dc.params[0] = mode; dc.params[1] = clamp; dc.params[2] = glow; dc.params[3] = float(r.color_mode);
+    std::memcpy(dc.clip, draw::active_clip, sizeof(dc.clip));
     D3D11_MAPPED_SUBRESOURCE m;
     if (SUCCEEDED(r.context->Map(r.cb_draw, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
         std::memcpy(m.pData, &dc, sizeof(dc));
@@ -586,6 +587,7 @@ void draw_frame(IDXGISwapChain *chain)
                 DrawConstants dc{};
                 std::memcpy(dc.model_view, mv, 64); std::memcpy(dc.proj, scene.proj, 64);
                 dc.tint[3] = scene.sonic_shadow_alpha; dc.params[3] = float(r.color_mode);
+                std::memcpy(dc.clip, scene.clip_plane, sizeof(dc.clip));
                 bind_constants(dc);
                 const UINT stride = sizeof(frontiers::Vertex), offset = 0;
                 r.context->IASetVertexBuffers(0, 1, &r.sonic.vb, &stride, &offset);
@@ -596,7 +598,9 @@ void draw_frame(IDXGISwapChain *chain)
                 r.context->OMSetDepthStencilState(r.stencil_once, 0);
                 for (auto &m : r.sonic.meshes) r.context->DrawIndexed(m.index_count, m.first_index, INT(m.base_vertex));
             }
+            std::memcpy(draw::active_clip, scene.clip_plane, sizeof(draw::active_clip));
             if (!scene.sonic_hidden) draw_mesh(r.sonic, scene.sonic_model, scene.view, scene.proj, 1, 0);
+            std::memset(draw::active_clip, 0, sizeof(draw::active_clip));
             drew_sonic = true;
             if (r.has_aura && scene.aura > 0.01f) {
                 if (scene.aura_dome && r.has_dome) draw_dome(scene);

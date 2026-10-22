@@ -389,6 +389,7 @@ D3D12_GPU_VIRTUAL_ADDRESS constants(Frame &f, const float *model_view, const flo
     std::memcpy(dc.model_view, model_view, 64); std::memcpy(dc.proj, proj, 64);
     dc.tint[0] = dc.tint[1] = dc.tint[2] = 1; dc.tint[3] = alpha;
     dc.params[0] = mode; dc.params[1] = clamp; dc.params[2] = glow; dc.params[3] = float(c.color_mode);
+    std::memcpy(dc.clip, draw::active_clip, sizeof(dc.clip));
     return push(f, &dc, sizeof(dc));
 }
 
@@ -614,6 +615,7 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
             draw::DrawConstants dc{};
             std::memcpy(dc.model_view, mv, 64); std::memcpy(dc.proj, scene.proj, 64);
             dc.tint[3] = scene.sonic_shadow_alpha; dc.params[3] = float(c.color_mode);
+            std::memcpy(dc.clip, scene.clip_plane, sizeof(dc.clip));
             const auto cb = push(f, &dc, sizeof(dc));
             if (cb) {
                 c.list->SetPipelineState(c.shadow);
@@ -631,7 +633,9 @@ bool draw(const game::Scene &scene, const assets::Data *data, float aspect, bool
         if (!scene.trail.empty()) draw_flat(f, draw::as_vertices(scene.trail), scene.view, scene.proj, 4, c.trail_texture, c.glow);
         if (!scene.arcs.empty()) draw_flat(f, draw::as_vertices(scene.arcs), scene.view, scene.proj, 4, c.arc_texture, c.glow);
         if (b) {
+            std::memcpy(draw::active_clip, scene.clip_plane, sizeof(draw::active_clip));
             if (!scene.sonic_hidden) draw_mesh(f, c.sonic, b, scene.sonic_model, scene.view, scene.proj, 1, 0);
+            std::memset(draw::active_clip, 0, sizeof(draw::active_clip));
             drew_sonic = true;
             if (c.has_aura && scene.aura > 0.01f) {
                 if (scene.aura_dome && c.has_dome) draw_dome(f, scene);

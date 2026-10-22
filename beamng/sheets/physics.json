@@ -22,6 +22,7 @@
     {"id": "swimDepth",       "value": 0.15, "unit": "m",     "purpose": "swimming: the ball's centre this far under the surface (chest-deep)",               "verified": false},
     {"id": "waterSpring",     "value": 80,   "unit": "1/s2",  "purpose": "how hard the water pushes the ball back to its height (per metre off)",           "verified": false},
     {"id": "waterDamping",    "value": 9,    "unit": "1/s",   "purpose": "damps bobbing on the water",                                                      "verified": false},
+    {"id": "waterLandDamping", "value": 40,  "unit": "1/s",   "purpose": "running on water: how fast a fall onto it is stopped (a deep plunge slowed him)", "verified": false},
     {"id": "waterFooting",    "value": 0.9,  "unit": "m",     "purpose": "water shallower than this: he has his footing and just runs",                     "verified": false},
     {"id": "groundProbe",     "value": 0.35, "unit": "m",     "purpose": "gap under the body that still counts as on the ground",      "verified": false},
     {"id": "boostRampKmhPerSecond", "value": 60,  "unit": "km/h/s", "purpose": "default: speed gained every second of boost, with no top speed (menu: Boost acceleration)", "verified": false},

@@ -12,7 +12,7 @@
 namespace draw {
 
 inline const char kShader[] = R"(
-cbuffer Draw : register(b0) { row_major float4x4 modelView; row_major float4x4 proj; float4 tint; float4 params; };
+cbuffer Draw : register(b0) { row_major float4x4 modelView; row_major float4x4 proj; float4 tint; float4 params; float4 clipPlane; };
 cbuffer Bones : register(b1) { float4 bones[768]; };
 Texture2D tex : register(t0);
 SamplerState wrapS : register(s0);
@@ -33,7 +33,10 @@ PSIn vsMesh(VSIn i) {
     float4 vp = mul(float4(sp, 1), modelView);
     PSIn o; o.v = vp.xyz; o.pos = mul(vp, proj); o.n = mul(float4(sn, 0), modelView).xyz; o.uv = i.uv; return o;
 }
+// swimming: nothing under the water's surface is drawn (clipPlane in view space; all zero = off)
+void underWater(float3 v) { if (any(clipPlane != 0)) clip(dot(float4(v, 1), clipPlane)); }
 float4 psMesh(PSIn i) : SV_Target {
+    underWater(i.v);
     float4 c = params.y > 0.5 ? tex.Sample(clampS, i.uv) : tex.Sample(wrapS, i.uv);
     clip(c.a - 0.5);
     float3 n = normalize(i.n + 1e-6);
@@ -70,7 +73,7 @@ float4 psFlat(FOut i) : SV_Target {
     return float4(output(i.c.rgb), i.c.a * a);
 }
 // Sonic's projected shadow: flat dark silhouette, drawn once per pixel (stencil)
-float4 psShadow(PSIn i) : SV_Target { return float4(0, 0, 0, tint.a); }
+float4 psShadow(PSIn i) : SV_Target { underWater(i.v); return float4(0, 0, 0, tint.a); }
 // Boost aura, after Frontiers' SonicAura material: Sonic's aura shell on his own pose, brighter
 // toward the silhouette (falloff) with the aura texture streaming over it. Drawn additive.
 // params.x: push along the normal (model units), params.y: time, params.z: tail length (aura shape only);
@@ -113,7 +116,9 @@ float4 psPost(POut i) : SV_Target {
 }
 )";
 
-struct DrawConstants { float model_view[16], proj[16], tint[4], params[4]; };
+struct DrawConstants { float model_view[16], proj[16], tint[4], params[4], clip[4]; };
+// the clip plane given to Sonic's body and shadow while he swims (view space; zero = off)
+inline float active_clip[4] = {0, 0, 0, 0};
 struct FlatVertex { float p[3], uv[2], c[4]; };
 
 inline const float kIdentity[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
