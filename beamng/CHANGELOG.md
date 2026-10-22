@@ -5,6 +5,11 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.12.1
+- Course sur les murs, de face : le mur est cherché 250 fois par seconde dans le calcul physique, 0,15 s devant lui, avec la vitesse qu'il avait juste avant (la collision qui le freine au contact ne lui coûte plus la montée) ; si les fenêtres ou les rebords empêchent de mesurer l'orientation du mur, un mur rencontré de face est pris comme face à lui. Il ne s'arrête plus net : il monte à la verticale.
+- Sur le mur, le stick le dirige librement : vers le mur = monter, en s'éloignant = descendre, le long du mur (vu de la caméra) = gauche ou droite ; sa course tourne vers la direction demandée, aussi pendant une montée. L'animation suit (montée ou course de côté).
+- Le mur repéré à l'avance, il continue droit dessus à pleine vitesse jusqu'au contact (phase d'approche), puis bascule sur la paroi ; il reste sur le mur quand une fenêtre ou un rebord gêne la mesure, tant qu'un rayon le trouve à moins de 2 m, et il y est tenu plus fermement.
+
 ## v0.12.0
 - Course sur les murs : en boost, assez vite contre une paroi raide (immeuble, falaise, mur de tunnel), Sonic court dessus avec les animations `wallrun` de Frontiers, debout sur le mur. De face, il monte tout droit ; en arrivant de biais, il grimpe d'abord en diagonale sur la paroi puis court le long du mur à l'horizontale (le stick l'oriente un peu vers le haut ou le bas). Il faut un vrai mur (au moins 1,5 m au-dessus de lui), pas une bordure. Il tient tant qu'il boost et que sa prise dure ; sinon il retombe. S'il dépasse le haut du mur en montant, il bascule par-dessus avec un petit saut et atterrit dessus ; un saut le fait bondir loin du mur.
 - Labo, nouvel onglet **Wall** : « Run on walls » (case), « Wall run speed » (120 km/h), « Wall grip » (3 s).
