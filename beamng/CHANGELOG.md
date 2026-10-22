@@ -5,6 +5,10 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.10.2
+- Nage : Sonic nage debout dans l'eau jusqu'au cou (animation de marche de Frontiers coupée à la surface) ; seule sa tête dépasse, au lieu d'un corps allongé qui semblait flotter dans l'air.
+- Passage de la terre à l'eau sans ralentir : assez rapide, il court à la surface même en eau peu profonde, en glissant juste au-dessus (avant, il traversait l'eau peu profonde en marchant dedans, la résistance de l'eau de BeamNG le freinait et il finissait par nager).
+
 ## v0.10.1
 - Nage : Sonic est coupé à la surface de l'eau (le moteur de rendu ne dessine plus ce qui est dessous, ombre comprise), et placé pour que la ligne d'eau passe à mi-corps quelle que soit la pose, donc il nage à moitié immergé sous tous les angles au lieu de paraître sous l'eau ou en l'air ; il tourne doucement au lieu de pivoter dans tous les sens ; la flottaison est plus douce.
 - Sortie de l'eau : le fond est cherché depuis au-dessus de Sonic. Sur une plage au ras de l'eau, il croyait encore nager ; il reprend maintenant sa course dès qu'il a pied.

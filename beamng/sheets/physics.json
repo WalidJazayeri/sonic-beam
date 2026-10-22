@@ -18,7 +18,7 @@
     {"id": "airControl",      "value": 0.35, "unit": "x",     "purpose": "share of ground control kept in the air",                    "verified": false},
     {"id": "jumpSpeed",       "value": 10,  "unit": "m/s",   "purpose": "upward speed of a jump (about 3 m high, the same at any speed)",                                     "verified": false},
     {"id": "extraGravity",    "value": 6,    "unit": "m/s2",  "purpose": "added fall acceleration so jumps feel snappy",               "verified": false},
-    {"id": "waterRunDepth",   "value": 0.03, "unit": "m",     "purpose": "running on water: how far the ball dips under the surface",                       "verified": false},
+    {"id": "waterRunDepth",   "value": -0.05, "unit": "m",    "purpose": "running on water: the ball skims this far under the surface (negative: just above it, out of BeamNG's water drag)", "verified": false},
     {"id": "swimDepth",       "value": 0.15, "unit": "m",     "purpose": "swimming: the ball's centre this far under the surface (chest-deep)",               "verified": false},
     {"id": "waterSpring",     "value": 80,   "unit": "1/s2",  "purpose": "how hard the water pushes the ball back to its height (per metre off)",           "verified": false},
     {"id": "waterDamping",    "value": 9,    "unit": "1/s",   "purpose": "damps bobbing on the water",                                                      "verified": false},

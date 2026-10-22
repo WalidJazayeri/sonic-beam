@@ -321,17 +321,16 @@ local function updateGFX(dt)
     local c = obj:getPosition() + obj:getNodePosition(ballCenter)
     ballZ = c.z
     if c.z - ballRadius < waterZ + 0.3 then
-      -- out of his depth when the bottom is further below the surface than he is tall
       -- the bottom under him, looked for from above (from the surface, a ray starting inside a
       -- beach saw nothing and he swam on dry land)
       local from = math.max(c.z, waterZ) + 1
-      local reach = from - (waterZ - P.waterFooting)
-      local d = obj:castRayStatic(vec3(c.x, c.y, from), vec3(0, 0, -1), reach)
-      if not (d and d < reach) then
-        -- already running on it, or landing on it from a jump: 85 % of the speed keeps him running
-        local fast = waterRunOn and (speedH > waterRunMs or ((lastWaterState == 1 or not lastGrounded) and speedH > waterRunMs * 0.85))
-        waterState = fast and 1 or 2
-      end
+      local d = obj:castRayStatic(vec3(c.x, c.y, from), vec3(0, 0, -1), from - (waterZ - 50))
+      local depth = d and (waterZ - (from - d)) or 50   -- water depth under him
+      -- fast enough he runs on the surface however shallow it is (wading in at speed, BeamNG's water
+      -- drag braked him before the deep water); slower he swims once out of his depth
+      local fast = waterRunOn and (speedH > waterRunMs or ((lastWaterState == 1 or not lastGrounded) and speedH > waterRunMs * 0.85))
+      if fast and depth > 0.05 then waterState = 1
+      elseif depth > P.waterFooting then waterState = 2 end
     end
   end
   lastWaterState = waterState
