@@ -27,6 +27,7 @@
     {"id": "trick_right", "clip": "chr_sonic@trick_r0.anm.pxd",     "loop": false, "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.1,  "verified": false},
     {"id": "land",        "clip": "chr_sonic@jump_e.anm.pxd",       "loop": false, "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.08, "verified": false},
     {"id": "jump_start",  "clip": "chr_sonic@jump_s.anm.pxd",       "loop": false, "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.06, "verified": false},
-    {"id": "ball",        "clip": "chr_sonic@ball_loop.anm.pxd",    "loop": true,  "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.08, "verified": false}
+    {"id": "ball",        "clip": "chr_sonic@ball_loop.anm.pxd",    "loop": true,  "rate": "fixed", "refKmh": 0,   "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.08, "verified": false},
+    {"id": "swim",        "clip": "chr_sonic@dive_loop.anm.pxd", "loop": true, "rate": "fixed", "refKmh": 0,  "minRate": 1.0, "maxRate": 1.0, "blendSeconds": 0.25, "verified": false}
   ]
 }

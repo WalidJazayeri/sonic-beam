@@ -47,6 +47,12 @@ local speedCapOn = P.speedCapOn == 1
 local speedCapMs = P.speedCapKmh / 3.6
 local boostRamp = P.boostRampKmhPerSecond / 3.6
 local jumpSpeed = P.jumpSpeed     -- Sonic Beam Lab: Jump height (the height grows with the square of this speed)
+-- water (Sonic Beam Lab, Water): fast enough he runs on it, slower and out of his depth he swims
+local waterRunOn, waterRunMs, swimMs = true, 80 / 3.6, 8 / 3.6
+local waterZ = nil                -- height of the water surface under Sonic (from the map, set by the mod's GE side)
+local ballZ = 0                   -- height of the ball's centre
+local waterState = 0              -- 0 none, 1 running on the water, 2 swimming
+local lastWaterState = 0
 local debugInfo = {}           -- last physics step, for the developer probe M.getDebug
 
 local function wrapPlayerController()
@@ -211,7 +217,8 @@ local function onPhysicsStep(dt)
   local vh = vec3(vel.x, vel.y, 0)
   local speed = vh:length()
   local dir, amount = inputDirection()
-  local boosting = boostHeld > 0.5 and amount > 0.1
+  local swimming = waterState == 2
+  local boosting = boostHeld > 0.5 and amount > 0.1 and not swimming
   local a
   if amount > 0.1 then
     if boosting then
@@ -223,6 +230,7 @@ local function onPhysicsStep(dt)
       else speedTarget = math.min(cruise, speedTarget + P.runAccel * dt) end
     end
     if speedCapOn then speedTarget = math.min(speedTarget, speedCapMs) end
+    if swimming then speedTarget = math.min(speedTarget, swimMs) end
     speedTarget = math.min(speedTarget, speed + P.targetLead)
     -- forward: follow the target speed along the input direction
     local along = vh:dot(dir)
@@ -233,7 +241,7 @@ local function onPhysicsStep(dt)
     local side = (dir * along - vh) * P.turnGain
     local len = side:length()
     if len > P.maxTurnAccel then side = side * (P.maxTurnAccel / len) end
-    if not grounded then side = side * P.airControl end
+    if not grounded and waterState == 0 then side = side * P.airControl end
     a = dir * push + side
   else
     speedTarget = speed
@@ -243,9 +251,14 @@ local function onPhysicsStep(dt)
     a = -vh * P.turnGain
     local len = a:length()
     if len > brake then a = a * (brake / len) end
-    if not grounded then a = a * P.airControl end
+    if not grounded and waterState == 0 then a = a * P.airControl end
   end
-  if grounded then
+  if waterState ~= 0 then
+    -- the water carries him: a spring holds the ball just touching it (running) or chest-deep (swimming)
+    local target = swimming and (waterZ - P.swimDepth) or (waterZ + ballRadius - P.waterRunDepth)
+    local lift = clamp(P.waterSpring * (target - ballZ), -P.waterSpring, P.waterSpring) - vel.z * P.waterDamping
+    a = a + up * (9.81 + lift)
+  elseif grounded then
     a = a - up * math.min(P.maxDownforce, P.downforce * speed * speed)
   else
     a = a - up * P.extraGravity
@@ -294,8 +307,28 @@ local function updateGFX(dt)
     local d = obj:castRayStatic(c, vec3(0, 0, -1), ballRadius + P.snapMeters + 0.5)
     groundGap = (d and d < ballRadius + P.snapMeters + 0.5) and math.max(0, d - ballRadius) or math.huge
   end
+  -- water: how much of the ball is in it; with no bottom under him he runs on it or swims
+  -- (the surface comes from the map's water objects: BeamNG's own per-node test reads nothing at high speed)
+  local vel = obj:getVelocity()
+  local speedH = math.sqrt(vel.x * vel.x + vel.y * vel.y)
+  waterState = 0
+  if ballCenter and waterZ then
+    local c = obj:getPosition() + obj:getNodePosition(ballCenter)
+    ballZ = c.z
+    if c.z - ballRadius < waterZ + 0.3 then
+      -- out of his depth when the bottom is further below the surface than he is tall
+      local reach = P.waterFooting + 0.05
+      local d = obj:castRayStatic(vec3(c.x, c.y, waterZ + 0.05), vec3(0, 0, -1), reach)
+      if not (d and d < reach) then
+        local fast = waterRunOn and (speedH > waterRunMs or (lastWaterState == 1 and speedH > waterRunMs * 0.85))
+        waterState = fast and 1 or 2
+      end
+    end
+  end
+  lastWaterState = waterState
   -- a sliding ball skips over the ground at speed, so the ray counts as ground contact too
-  grounded = groundGap < 0.15
+  grounded = groundGap < 0.15 or waterState == 1
+  debugInfo.waterZ, debugInfo.ballZ, debugInfo.water = waterZ or -1, ballZ, waterState
   for _, cid in ipairs(ballNodes) do
     if grounded then break end
     if obj:isNodeColliding(cid) then grounded = true end
@@ -303,7 +336,7 @@ local function updateGFX(dt)
   if jumpQueued then jumpWait = 0.25; jumpQueued = false end
   if jumpWait > 0 then
     jumpWait = jumpWait - dt   -- a press waits a moment for the ground rather than being lost
-    if grounded and jumpTimer <= 0 then
+    if grounded and jumpTimer <= 0 and waterState ~= 2 then
       jumpWait = 0
       -- Reach Sonic's jump speed over a short push (a single physics step would shake the soft body).
       local vz = obj:getVelocity().z
@@ -318,8 +351,9 @@ local function updateGFX(dt)
   -- direction held in the air, for the jump ball's tricks: 1 left, 2 right, 3 back
   local airInput = 0
   if walkX < -0.5 then airInput = 1 elseif walkX > 0.5 then airInput = 2 elseif walkY < -0.5 then airInput = 3 end
-  obj:queueGameEngineLua(string.format('if sonicfrontiers_sonic then sonicfrontiers_sonic.onRunner(%d, %d, %d, %d, %d, %d) end',
-    boosting, jumpsToReport, grounded and 1 or 0, amount > 0.1 and 1 or 0, surfaceIndex(), airInput))
+  if waterState == 2 then boosting = 0 end
+  obj:queueGameEngineLua(string.format('if sonicfrontiers_sonic then sonicfrontiers_sonic.onRunner(%d, %d, %d, %d, %d, %d, %d) end',
+    boosting, jumpsToReport, grounded and 1 or 0, amount > 0.1 and 1 or 0, waterState ~= 0 and SURFACE.WATER or surfaceIndex(), airInput, waterState))
   jumpsToReport = 0
 end
 
@@ -363,7 +397,10 @@ M.setEnabled = function(on)
   end
   log('I', 'sonicfrontiers', on and 'Sonic takes over the walking body' or 'walking body handed back to BeamNG')
 end
-M.setSpeedSettings = function(capOn, capKmh, rampKmhPerSecond, jumpHeight)
+M.setSpeedSettings = function(capOn, capKmh, rampKmhPerSecond, jumpHeight, runOnWater, waterRunKmh, swimKmh)
+  if runOnWater ~= nil then waterRunOn = runOnWater and true or false end
+  waterRunMs = math.max(0, waterRunKmh or 80) / 3.6
+  swimMs = math.max(0.5, swimKmh or 8) / 3.6
   speedCapOn = capOn and true or false
   jumpSpeed = P.jumpSpeed * math.sqrt(math.max(0.01, jumpHeight or 1))   -- typed values may go past the lab's slider
   speedCapMs = math.max(10, capKmh or P.speedCapKmh) / 3.6
@@ -371,6 +408,8 @@ M.setSpeedSettings = function(capOn, capKmh, rampKmhPerSecond, jumpHeight)
   log('I', 'sonicfrontiers', string.format('speed: limit %s at %.0f km/h, boost +%.0f km/h per second, jump %.1f m/s',
     tostring(speedCapOn), speedCapMs * 3.6, boostRamp * 3.6, jumpSpeed))
 end
+-- the water surface under Sonic, from the map's water objects (nil: none)
+M.setWater = function(z) waterZ = z end
 M.setAutopilot = function(on)
   autopilot = on and true or false
   autoTime = 0

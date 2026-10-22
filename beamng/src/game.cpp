@@ -229,7 +229,7 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         if (!s.heading_set) { s.heading = std::atan2(fwd.y, fwd.x); s.heading_set = true; }
     }
     const bool was_air = s.air;
-    if (f->grounded) { s.ground_lost = 0; s.air = false; }
+    if (f->grounded || f->water == 2) { s.ground_lost = 0; s.air = false; }   // swimming is not flying
     else { s.ground_lost += dt; if (s.ground_lost > 0.12) s.air = true; }
     if (s.air) s.air_time = was_air ? s.air_time + dt : s.ground_lost;
     const bool landed = was_air && !s.air;
@@ -328,7 +328,10 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         if (s.air_trick == -2 && f->airInput == 0) s.air_trick = -1;
         if (s.air_trick >= 0) { ball_now = false; want = Anim(s.air_trick); }
     }
-    if (ball_now) {
+    if (f->water == 2) {
+        want = Anim::swim;   // out of his depth and too slow to run on the water
+        ball_now = false;
+    } else if (ball_now) {
         const double start = std::min(0.22, double(d->clips[int(Anim::jump_start)].duration));
         want = now - s.jump_at < start ? Anim::jump_start : Anim::ball;
     } else if (s.air_trick >= 0) {
@@ -373,7 +376,9 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         const float k = tuning::sonicHeightMeters / d->sonic_height;
         const V3 face{std::cos(s.heading), std::sin(s.heading), 0}, upz{0, 0, 1};
         const V3 r = cross(face, upz);
-        M4 sonic = mul(rot_z(-s.lean), basis(r * -k, upz * k, face * k, feet));
+        // swimming: drawn lower, half in the water
+        const V3 drawn_feet = f->water == 2 ? feet - upz * tuning::swimDrop : feet;
+        M4 sonic = mul(rot_z(-s.lean), basis(r * -k, upz * k, face * k, drawn_feet));
         // the jump ball: Sonic rolls forward around the middle of the ball, inside Frontiers' spin shell
         const bool rolling = ball_now && s.player.anim == int(Anim::ball);
         s.ball_amount += ((rolling ? 1.0f : 0.0f) - s.ball_amount) * std::min(1.0f, float(dt) * (rolling ? 14 : 10));

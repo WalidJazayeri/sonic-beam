@@ -55,6 +55,7 @@ typedef struct {
   float auraLightning;
   int32_t auraBody;
   float auraLength;
+  int32_t water;
   float trailFade;
   int32_t jumpStyle;
   float ballSpin;
@@ -80,7 +81,39 @@ local hiddenUnicycle = nil
 local hiddenAt = -100             -- when the walker's meshes were last hidden (clock)
 local runnerBoost, runnerGrounded, pendingJumps = 0, 0, 0
 local runnerWantsMove, runnerSurface = 0, 0
-local runnerAirInput = 0          -- direction held in the air (1 left, 2 right, 3 back): tricks     -- stick pushed, ground under Sonic (footsteps)
+local runnerAirInput = 0          -- direction held in the air (1 left, 2 right, 3 back): tricks
+local runnerWater = 0             -- 1 running on water, 2 swimming
+local waterObjects = nil          -- the map's WaterBlocks and WaterPlanes (found once per map)
+local sentWaterZ = false          -- last water height sent to the body
+
+-- the water surface at x, y: WaterBlocks cover their box (their surface is at their position's
+-- height), a WaterPlane is a sea everywhere
+local function waterSurfaceAt(x, y)
+  if not waterObjects then
+    waterObjects = {}
+    for _, cls in ipairs({'WaterBlock', 'WaterPlane'}) do
+      for _, name in ipairs(scenetree.findClassObjects(cls) or {}) do
+        local o = scenetree.findObject(name)
+        if o then
+          local p = o:getPosition()
+          local entry = {z = p.z, plane = cls == 'WaterPlane'}
+          if not entry.plane and o.getWorldBox then
+            local b = o:getWorldBox()
+            entry.x0, entry.y0, entry.x1, entry.y1 = b.minExtents.x, b.minExtents.y, b.maxExtents.x, b.maxExtents.y
+          end
+          if entry.plane or entry.x0 then waterObjects[#waterObjects + 1] = entry end
+        end
+      end
+    end
+  end
+  local best = nil
+  for _, w in ipairs(waterObjects) do
+    if w.plane or (x >= w.x0 and x <= w.x1 and y >= w.y0 and y <= w.y1) then
+      if not best or w.z > best then best = w.z end
+    end
+  end
+  return best
+end     -- stick pushed, ground under Sonic (footsteps)
 local rings = {}                  -- {pos = vec3, born = seconds}
 local lastSpawn = -100
 local clock = 0
@@ -124,6 +157,7 @@ local settings = {
   auraThickness = 1, auraIntensity = 1, auraLightning = 1,   -- boost aura on Sonic's body, and its lightning
   auraBodyShape = false,                                      -- false: lying along the run, round in front; true: hugs his body
   auraLength = 1,                                             -- how far the aura streams back behind him
+  runOnWater = true, waterRunKmh = 80, swimKmh = 8,           -- water: run on it from this speed, else swim
   fxBySpeed = true, fxSpeedAmount = 0.75,              -- trail, lightning and aura grow with Sonic's speed
   blurStrength = 1,                                    -- speed blur multiplier
   -- jump: 0 ball the whole jump, 1 ball going up then tricks, 2 ball with tricks on a direction
@@ -188,6 +222,9 @@ local function openLab(tab)
     auraLightning = im.FloatPtr(settings.auraLightning),
     auraBodyShape = im.BoolPtr(settings.auraBodyShape),
     auraLength = im.FloatPtr(settings.auraLength),
+    runOnWater = im.BoolPtr(settings.runOnWater),
+    waterRunKmh = im.FloatPtr(settings.waterRunKmh),
+    swimKmh = im.FloatPtr(settings.swimKmh),
     fxBySpeed = im.BoolPtr(settings.fxBySpeed),
     fxSpeedAmount = im.FloatPtr(settings.fxSpeedAmount),
     blurStrength = im.FloatPtr(settings.blurStrength),
@@ -325,6 +362,15 @@ local function drawLab()
       labSlider('Aura length', w.auraLength, 'auraLength', 0, 3, timesText, 1, 'x1')
       labSlider('Aura intensity', w.auraIntensity, 'auraIntensity', 0, 2, timesText, 1, 'x1')
       labSlider('Aura lightning', w.auraLightning, 'auraLightning', 0, 3, timesText, 1, 'x1')
+      im.EndTabItem()
+    end
+    if labTab('Water') then
+      im.TextUnformatted('Out of his depth, Sonic runs on the water when fast enough, else he swims:')
+      if im.Checkbox('Run on water', w.runOnWater) then settings.runOnWater = w.runOnWater[0]; settingsSent = nil end
+      if not w.runOnWater[0] then im.BeginDisabled(true) end
+      if labSlider('Water run speed', w.waterRunKmh, 'waterRunKmh', 20, 300, kmhText, 80, '80') then settingsSent = nil end
+      if not w.runOnWater[0] then im.EndDisabled() end
+      if labSlider('Swim speed', w.swimKmh, 'swimKmh', 2, 30, kmhText, 8, '8') then settingsSent = nil end
       im.EndTabItem()
     end
     if labTab('Jump') then
@@ -614,9 +660,10 @@ local function setSonicCamera(on)
 end
 
 -- called by the runner inside the walking body, every graphics frame
-local function onRunner(boost, jumps, grounded, wantsMove, surface, airInput)
+local function onRunner(boost, jumps, grounded, wantsMove, surface, airInput, water)
   runnerBoost, runnerGrounded, runnerWantsMove, runnerSurface = boost, grounded, wantsMove or 0, surface or 0
   runnerAirInput = airInput or 0
+  runnerWater = water or 0
   pendingJumps = pendingJumps + jumps
 end
 
@@ -657,13 +704,15 @@ local function onPreRender(dtReal, dtSim)
     if runnerLoadedFor ~= id then
       runnerLoadedFor = id
       autopilotSent = nil
+      sentWaterZ = false
       sonicBodyId = id
       unicycle:queueLuaCommand("extensions.load('sonicfrontiers_runner') if sonicfrontiers_runner then sonicfrontiers_runner.setEnabled(true) end")
     end
     if settingsSent ~= id then
       settingsSent = id
-      unicycle:queueLuaCommand(string.format('if sonicfrontiers_runner then sonicfrontiers_runner.setSpeedSettings(%s, %f, %f, %f) end',
-        tostring(settings.speedCapOn), settings.speedCapKmh, settings.boostRampKmhPerSecond, settings.jumpHeight))
+      unicycle:queueLuaCommand(string.format('if sonicfrontiers_runner then sonicfrontiers_runner.setSpeedSettings(%s, %f, %f, %f, %s, %f, %f) end',
+        tostring(settings.speedCapOn), settings.speedCapKmh, settings.boostRampKmhPerSecond, settings.jumpHeight,
+        tostring(settings.runOnWater), settings.waterRunKmh, settings.swimKmh))
     end
     if autopilotSent ~= testMode then
       autopilotSent = testMode
@@ -674,6 +723,13 @@ local function onPreRender(dtReal, dtSim)
     if hiddenUnicycle ~= id or clock - hiddenAt > 0.5 then
       hiddenUnicycle, hiddenAt = id, clock
       unicycle:setMeshAlpha(0, '')
+    end
+    -- tell the body where the water's surface is under him (the map's water objects)
+    local bodyPos = unicycle:getPosition()
+    local wz = waterSurfaceAt(bodyPos.x, bodyPos.y)
+    if wz ~= sentWaterZ then
+      sentWaterZ = wz
+      unicycle:queueLuaCommand('if sonicfrontiers_runner then sonicfrontiers_runner.setWater(' .. (wz and string.format('%.3f', wz) or 'nil') .. ') end')
     end
     groundedByRay = updateBody(unicycle)
     rememberSafeSpot(unicycle, groundedByRay or runnerGrounded == 1)
@@ -758,6 +814,7 @@ sendFrame = function()
   frame.auraLightning = settings.auraLightning
   frame.auraBody = settings.auraBodyShape and 1 or 0
   frame.auraLength = settings.auraLength
+  frame.water = runnerWater
   frame.trailFade = settings.trailFade
   frame.jumpStyle = settings.jumpStyle
   frame.ballSpin = settings.ballSpin
@@ -788,6 +845,7 @@ end
 
 local function onClientStartMission()
   onFootDone, runnerLoadedFor, hiddenUnicycle, sonicBodyId = false, nil, nil, nil
+  waterObjects, sentWaterZ = nil, false
   notAllowedFor = 0
   safeSpots = {}
   rings = {}

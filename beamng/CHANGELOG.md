@@ -5,6 +5,11 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.10.0
+- Sonic et l'eau : quand il n'a pas pied, assez rapide il court sur l'eau (porté à la surface, animations de course et de boost, pas « eau » de Frontiers), sinon il nage (enfoncé jusqu'à la poitrine, animation de plongée `dive_loop` de Frontiers, dessiné à moitié dans l'eau, lent, sans boost ni saut) jusqu'à la rive. Sur un haut-fond, il court normalement.
+- La hauteur de l'eau vient des objets d'eau de la carte (mers, lacs, bassins) : le test de BeamNG par point du corps ne voit rien à grande vitesse.
+- Labo, nouvel onglet **Water** : « Run on water » (case), « Water run speed » (80 km/h), « Swim speed » (8 km/h).
+
 ## v0.9.2
 - Saut en boule : une fois la boule formée, seule la coque de Frontiers est dessinée, comme dans le jeu ; le corps de Sonic roulé en boule est caché (ses semelles et ses piquants dépassaient de la coque en tournant). Il réapparaît dès qu'il se déroule ; l'ombre au sol reste.
 

@@ -29,6 +29,7 @@
     {"id": "burstSeconds",      "value": 0.45, "unit": "s",     "purpose": "length of the flash and shock wave when a boost starts",            "verified": false},
     {"id": "burstMeters",       "value": 2.6,  "unit": "m",     "purpose": "size the boost-start shock wave grows to",                          "verified": false},
     {"id": "sonicHeightMeters", "value": 1.0,  "unit": "m",     "purpose": "Sonic's standing height in BeamNG's world",                     "verified": false},
+    {"id": "swimDrop",          "value": 0.35, "unit": "m",     "purpose": "swimming: Sonic is drawn this much lower, half in the water",        "verified": false},
     {"id": "speedSmoothing",    "value": 0.12, "unit": "s",     "purpose": "time constant smoothing his speed for animation",               "verified": false},
     {"id": "turnRateDegrees",   "value": 70,   "unit": "deg/s", "purpose": "yaw rate that counts as a hard turn (drift while boosting)",     "verified": false},
     {"id": "facingRate",        "value": 12,   "unit": "1/s",   "purpose": "how fast Sonic turns to face where he runs",                    "verified": false},
