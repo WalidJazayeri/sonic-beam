@@ -63,6 +63,12 @@ local wallDir = vec3(0, 0, 1)     -- where he runs on it
 local wallSpeed, wallTime, wallCooldown = 0, 0, 0
 local wallKick = nil              -- velocity added once when he leaves the wall
 local leaveWall, wallStep, wallEnter
+-- v normalized, or fallback when it is (nearly) zero or not a number: a NaN direction blew up the body
+local function unit(v, fallback)
+  local l = v:length()
+  if not (l > 1e-4 and l < 1e12) then return fallback end
+  return v / l
+end
 local recentSpeed = 0             -- his horizontal speed of the last instants (a wall that brakes him
                                   -- at the contact must not cost him the wall run)
 local lastDirH = vec3(0, 1, 0)    -- where he was last running
@@ -230,6 +236,7 @@ local speedTarget, learnedPush = 0, 0
 local function onPhysicsStep(dt)
   if not enabled or #massNodes == 0 or totalMass <= 0 then return end
   local vel = obj:getVelocity()
+  if not (vel:length() < 1e5) then wallState, wallApproach = 0, false return end   -- a broken body: leave it to BeamNG
   local vh = vec3(vel.x, vel.y, 0)
   local speed = vh:length()
   local dir, amount = inputDirection()
@@ -260,11 +267,11 @@ local function onPhysicsStep(dt)
       local alongH = wallN:cross(up)
       if alongH:length() > 1e-3 then
         alongH:normalize()
-        local upW = (up - wallN * wallN:dot(up)):normalized()
+        local upW = unit(up - wallN * wallN:dot(up), up)
         local want = alongH * dir:dot(alongH) + upW * dir:dot(-wallN)
         if want:length() > 0.15 then
           want:normalize()
-          wallDir = (wallDir + (want - wallDir) * math.min(1, P.wallSteer * dt)):normalized()
+          wallDir = unit(wallDir + (want - wallDir) * math.min(1, P.wallSteer * dt), wallDir)
         end
       end
     end
@@ -381,12 +388,12 @@ wallEnter = function(vel, amount)
   wallN, wallTime, wallSpeed = n, 0, math.max(recentSpeed, vel:length())
   wallApproach, approachDir = true, dirH
   if -n:dot(dirH) > P.wallHeadOn then
-    wallState, wallDir = 1, (up - n * n:dot(up)):normalized()   -- head on: straight up
+    wallState, wallDir = 1, unit(up - n * n:dot(up), up)   -- head on: straight up
   else
     local along = dirH - n * n:dot(dirH)
     along.z = 0
     -- onto the wall at a slant; then the stick steers him
-    wallDir = (along:normalized() + up * P.wallAlongLift):normalized()
+    wallDir = unit(unit(along, lastDirH) + up * P.wallAlongLift, up)
     wallState = (-n):dot(wallDir:cross(up)) > 0 and 3 or 2
   end
   log('D', 'sonicfrontiers', string.format('wall run %d at %.0f km/h', wallState, wallSpeed * 3.6))
@@ -413,8 +420,8 @@ wallStep = function(dt, vel)
   end
   local n = wallAt(c, -wallN, ballRadius + P.wallHoldReach)
   if n and math.abs(n.z) <= P.wallMaxSlope + 0.15 then
-    wallN = (wallN * 0.8 + n * 0.2):normalized()
-    wallDir = (wallDir - wallN * wallN:dot(wallDir)):normalized()
+    wallN = unit(wallN * 0.8 + n * 0.2, wallN)
+    wallDir = unit(wallDir - wallN * wallN:dot(wallDir), unit(up - wallN * wallN:dot(up), up))
   elseif not n then
     -- a window or a ledge spoils the normal: still on the wall while a single ray finds it
     local d = obj:castRayStatic(c, -wallN, ballRadius + P.wallHoldReach)

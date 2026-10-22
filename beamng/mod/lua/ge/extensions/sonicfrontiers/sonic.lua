@@ -625,6 +625,9 @@ local function checkImpacts(unicycle)
   local vsNow = vec3(unicycle:getVelocityXYZ())
   local ahead = centre + vsNow * IMPACT_LOOKAHEAD
   local path = (ahead - from):length()
+  -- a body that just spawned or blew up reports absurd speeds: never sweep thousands of points (the
+  -- loop below froze the game)
+  if not (path < 120) then from, ahead, path = centre, centre, 0 end
   for _, veh in ipairs(getAllVehicles()) do
     local id = veh:getId()
     if id ~= myId and veh:getJBeamFilename() ~= 'unicycle' then
@@ -639,7 +642,7 @@ local function checkImpacts(unicycle)
         local half = bb:getHalfExtents()
         local ax = {bb:getAxis(0), bb:getAxis(1), bb:getAxis(2)}
         local hx, hy, hz = half.x, half.y, half.z
-        local steps = math.max(1, math.ceil(path / 0.4))
+        local steps = math.min(300, math.max(1, math.ceil(path / 0.4)))
         for s = 1, steps do
           local q = from + (ahead - from) * (s / steps)
           local d = q - c

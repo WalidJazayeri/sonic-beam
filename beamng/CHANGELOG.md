@@ -5,6 +5,10 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.12.2
+- Gel du jeu corrigé : le test des chocs avec les véhicules balayait la trajectoire de Sonic en un nombre de points qui suivait sa vitesse, sans plafond ; une vitesse aberrante (corps qui vient d'apparaître, instabilité) en faisait une boucle quasi infinie. Le balayage est plafonné et ignoré quand la vitesse n'a pas de sens.
+- Course sur les murs : toutes les directions calculées sur le mur sont protégées contre les vecteurs nuls ou invalides (ils pouvaient faire exploser le corps), et Sonic ne pousse plus un corps dont la vitesse est invalide.
+
 ## v0.12.1
 - Course sur les murs, de face : le mur est cherché 250 fois par seconde dans le calcul physique, 0,15 s devant lui, avec la vitesse qu'il avait juste avant (la collision qui le freine au contact ne lui coûte plus la montée) ; si les fenêtres ou les rebords empêchent de mesurer l'orientation du mur, un mur rencontré de face est pris comme face à lui. Il ne s'arrête plus net : il monte à la verticale.
 - Sur le mur, le stick le dirige librement : vers le mur = monter, en s'éloignant = descendre, le long du mur (vu de la caméra) = gauche ou droite ; sa course tourne vers la direction demandée, aussi pendant une montée. L'animation suit (montée ou course de côté).
