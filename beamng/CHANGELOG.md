@@ -5,6 +5,15 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.11.0
+- Collisions avec les véhicules (trafic, voitures garées, la sienne) : chaque image, le trajet de Sonic est testé contre la boîte de chaque véhicule, avec 0,08 s d'avance sur sa course (la collision normale de BeamNG arrête son corps léger dès le contact : le choc doit partir juste avant, à pleine vitesse). À l'impact, il donne au véhicule l'élan d'une masse de 1000 kg × « Impact force » : le véhicule est projeté, et poussé plus fort autour du point d'impact pour que la carrosserie s'écrase (extension de véhicule `sonicfrontiers_impact`, qui donne aussi la masse du véhicule). Éclair et éclats électriques de Frontiers au point d'impact, bang supersonique au-delà de 120 km/h.
+- Labo, nouvel onglet **Impact** : ce que fait Sonic au choc (une case cochée à la fois) :
+  - **Sonic loses speed by the mass of the car** (par défaut) : il perd d'autant plus de vitesse que la voiture est lourde ;
+  - **Sonic keeps his speed and plows through** : il garde sa vitesse ;
+  - **Sonic bounces off the car** : il rebondit ;
+  - **Off** : seule la collision normale de BeamNG.
+  Curseurs « Impact force » (×1) et « Car damage » (×1, 0 = poussée sans déformation).
+
 ## v0.10.2
 - Nage : Sonic nage debout dans l'eau jusqu'au cou (animation de marche de Frontiers coupée à la surface) ; seule sa tête dépasse, au lieu d'un corps allongé qui semblait flotter dans l'air.
 - Passage de la terre à l'eau sans ralentir : assez rapide, il court à la surface même en eau peu profonde, en glissant juste au-dessus (avant, il traversait l'eau peu profonde en marchant dedans, la résistance de l'eau de BeamNG le freinait et il finissait par nager).

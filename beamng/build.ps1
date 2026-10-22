@@ -19,7 +19,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Sheet preflight failed: fix the sheets before 
 # Lua check: syntax, and no local read as a global by mistake (BeamNG would only fail at run time)
 $luac = Join-Path $repo '.tools\luac51.exe'
 $luaGlobals = @('be','castRayStatic','clamp','controller','core_camera','core_gamestate','gameplay_missions_missionManager','deepcopy','enablePhysicsStepHook','extensions','gameplay_walk',
-  'getPlayerVehicle','ipairs','jsonReadFile','jsonWriteFile','log','math','MoveManager','obj','pairs','particles','pcall','tonumber','quatFromDir','require','scenetree','serialize',
+  'getAllVehicles','getPlayerVehicle','ipairs','jsonReadFile','jsonWriteFile','log','math','MoveManager','obj','pairs','particles','pcall','tonumber','quatFromDir','require','scenetree','serialize',
   'setExtensionUnloadMode','setmetatable','socket','spawn','string','table','tostring','type','ui_imgui','v','vec3')
 foreach ($lua in Get-ChildItem -Recurse (Join-Path $root 'mod') -Filter *.lua) {
     $listing = & $luac -l -p $lua.FullName 2>&1

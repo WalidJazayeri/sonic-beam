@@ -17,6 +17,7 @@ Load any map in Freeroam and you start on foot as the actual Sonic from Sonic Fr
 - **His sounds**: footsteps that match the ground (asphalt, dirt, grass, sand, snow, water, metal), jump, boost, landing, brake, speed wind, a sonic boom on fast boosts.
 - **A real shadow** that follows his silhouette and BeamNG's sun.
 - **Runs on water**: fast enough, Sonic runs across lakes and the sea; slower and out of his depth, he swims back to the shore.
+- **Smashes cars**: hitting traffic at speed sends the cars flying and crushes them. In the Lab, choose whether Sonic loses speed by the car's mass, plows through or bounces off, and tune the impact force and the damage.
 - **Frontiers' jump ball**: Sonic curls up into a spinning blue ball when he jumps, in Frontiers' own spin shell. Choose in the Lab whether he stays a ball, does tricks after the top of the jump, or does a trick when you hold a direction in the air; tune the spin speed, the glow and the jump height.
 - **Sonic Beam Lab**: an in-game panel (O menu, then Lab) to tune volumes, shadow, trail, lightning, speed blur, aura, jump ball and animation speed. Click any value to type it, even past the slider's range. Saved between sessions.
 - **Unstuck** in the O menu puts you back on your feet after a 600 km/h crash into a fence.

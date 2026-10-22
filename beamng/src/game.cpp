@@ -290,6 +290,15 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         if (s.drift_time >= row.everySeconds) { s.drift_time -= row.everySeconds; pay(RingRule::drift, row.rings, now, origin); }
     } else s.drift_time = 0;
     const bool boosting = s.state == int(sheets::State::boost) || drifting;
+    // a hit on a vehicle: Frontiers' boost flash and a crackle of bolts where he struck, and a boom
+    if (f->impact > 0 && f->onFoot) {
+        s.burst_at = now; s.burst_pos = origin;
+        audio::play(f->impact * 3.6f > 120 ? Sound::sonic_boom : Sound::land);
+        for (int i = 0; i < 14; ++i) {
+            const float a = rnd() * 2 * kPi, r = 0.2f + 0.7f * rnd();
+            s.bolts.push_back({origin + V3{std::cos(a) * r, std::sin(a) * r, (rnd() - 0.3f) * 0.9f}, {}, now + 0.02 * i, 0.16f, 0.8f + 0.6f * rnd(), rnd() * 6.28f, 2, int(rnd() * 16) & 15});
+        }
+    }
     if (boosting && !s.was_boosting) {
         pay(RingRule::boost, ringRules[int(RingRule::boost)].rings, now, origin);
         s.burst_at = now; s.burst_pos = origin;

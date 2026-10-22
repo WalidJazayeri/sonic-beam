@@ -57,6 +57,7 @@ typedef struct {
   float auraLength;
   int32_t water;
   float waterZ;
+  float impact;
   float trailFade;
   int32_t jumpStyle;
   float ballSpin;
@@ -84,6 +85,12 @@ local runnerBoost, runnerGrounded, pendingJumps = 0, 0, 0
 local runnerWantsMove, runnerSurface = 0, 0
 local runnerAirInput = 0          -- direction held in the air (1 left, 2 right, 3 back): tricks
 local runnerWater = 0             -- 1 running on water, 2 swimming
+local carMass = {}                -- vehicle id -> kg (reported by the vehicle's sonicfrontiers_impact)
+local impactLoaded = {}           -- vehicle id -> the impact extension was loaded into it
+local impactCooldown = {}         -- vehicle id -> clock before it can be hit again
+local lastImpactPos = nil         -- Sonic's centre last frame (hits are swept along his path)
+local lastHit = nil               -- the last hit, for developer checks (M.getLastHit)
+local pendingImpact = 0           -- closing speed (m/s) of a hit this frame, for the renderer's flash
 local waterObjects = nil          -- the map's WaterBlocks and WaterPlanes (found once per map)
 local sentWaterZ = false          -- last water height sent to the body
 
@@ -163,6 +170,9 @@ local settings = {
   blurStrength = 1,                                    -- speed blur multiplier
   -- jump: 0 ball the whole jump, 1 ball going up then tricks, 2 ball with tricks on a direction
   jumpStyle = 0, ballSpin = 3, ballGlow = 1, jumpHeight = 1,
+  -- vehicles: 'mass' Sonic loses speed by the car's mass, 'plow' he keeps it, 'bounce' he bounces off,
+  -- 'off' only BeamNG's own collision; impactForce: how heavy he hits; carDamage: how much they crush
+  impactMode = 'mass', impactForce = 1, carDamage = 1,
 }
 local menuOpen = false
 local menuWidgets = nil
@@ -230,6 +240,8 @@ local function openLab(tab)
     fxSpeedAmount = im.FloatPtr(settings.fxSpeedAmount),
     blurStrength = im.FloatPtr(settings.blurStrength),
     ballSpin = im.FloatPtr(settings.ballSpin),
+    impactForce = im.FloatPtr(settings.impactForce),
+    carDamage = im.FloatPtr(settings.carDamage),
     ballGlow = im.FloatPtr(settings.ballGlow),
     jumpHeight = im.FloatPtr(settings.jumpHeight),
     open = im.BoolPtr(true),
@@ -296,6 +308,14 @@ end
 local function timesText(x) return string.format('x%.2f', x) end
 
 -- Lab, Jump tab: one box per jump style, only one ticked at a time
+-- Lab, Impact tab: what a hit does to Sonic (one box ticked at a time)
+local IMPACT_MODES = {
+  {id = 'mass', label = 'Sonic loses speed by the mass of the car'},
+  {id = 'plow', label = 'Sonic keeps his speed and plows through'},
+  {id = 'bounce', label = 'Sonic bounces off the car'},
+  {id = 'off', label = "Off: BeamNG's own collision only"},
+}
+
 local JUMP_STYLES = {
   'Ball for the whole jump (no tricks)',
   'Ball going up, then tricks or a normal fall after the top of the jump',
@@ -372,6 +392,16 @@ local function drawLab()
       if labSlider('Water run speed', w.waterRunKmh, 'waterRunKmh', 20, 300, kmhText, 80, '80') then settingsSent = nil end
       if not w.runOnWater[0] then im.EndDisabled() end
       if labSlider('Swim speed', w.swimKmh, 'swimKmh', 2, 30, kmhText, 8, '8') then settingsSent = nil end
+      im.EndTabItem()
+    end
+    if labTab('Impact') then
+      im.TextUnformatted('When Sonic runs into a vehicle:')
+      for _, mode in ipairs(IMPACT_MODES) do
+        if im.Checkbox(mode.label .. '##impact' .. mode.id, im.BoolPtr(settings.impactMode == mode.id)) then settings.impactMode = mode.id end
+      end
+      im.Spacing()
+      labSlider('Impact force', w.impactForce, 'impactForce', 0, 5, timesText, 1, 'x1')
+      labSlider('Car damage', w.carDamage, 'carDamage', 0, 3, timesText, 1, 'x1')
       im.EndTabItem()
     end
     if labTab('Jump') then
@@ -559,6 +589,73 @@ local function readSun()
   toSun = vec3(math.sin(a) * math.cos(e), math.cos(a) * math.cos(e), math.sin(e))
 end
 
+-- Sonic against vehicles: each frame his path is swept through every vehicle's box; on a hit he
+-- hands it momentum (Impact force: he hits like 1000 kg x the setting), the vehicle's
+-- sonicfrontiers_impact pushes it and crushes it around the contact, and Sonic slows, keeps going
+-- or bounces (Impact tab)
+local IMPACT_MIN_MS = 4           -- slower than this it is just a bump
+local IMPACT_LOOKAHEAD = 0.08     -- seconds of his path tested ahead of him
+local function checkImpacts(unicycle)
+  if settings.impactMode == 'off' or not bodyFeet then lastImpactPos = nil return end
+  local centre = bodyFeet + vec3(0, 0, 0.5)
+  local from = lastImpactPos or centre
+  if (centre - from):length() > 60 then from = centre end   -- a teleport
+  lastImpactPos = centre
+  local myId = unicycle:getId()
+  -- the sweep runs a little ahead of him: BeamNG's own collision stops his light body as soon as he
+  -- touches a car, so the hit must land the moment before, with all his speed
+  local vsNow = vec3(unicycle:getVelocityXYZ())
+  local ahead = centre + vsNow * IMPACT_LOOKAHEAD
+  local path = (ahead - from):length()
+  for _, veh in ipairs(getAllVehicles()) do
+    local id = veh:getId()
+    if id ~= myId and veh:getJBeamFilename() ~= 'unicycle' then
+      local bb = veh:getSpawnWorldOOBB()
+      local c = bb:getCenter()
+      local far = (c - centre):length()
+      if far < 40 and not impactLoaded[id] then
+        impactLoaded[id] = true
+        veh:queueLuaCommand("extensions.load('sonicfrontiers_impact')")
+      end
+      if far < 12 + path and (impactCooldown[id] or -1) < clock then
+        local half = bb:getHalfExtents()
+        local ax = {bb:getAxis(0), bb:getAxis(1), bb:getAxis(2)}
+        local hx, hy, hz = half.x, half.y, half.z
+        local steps = math.max(1, math.ceil(path / 0.4))
+        for s = 1, steps do
+          local q = from + (ahead - from) * (s / steps)
+          local d = q - c
+          local lx, ly, lz = d:dot(ax[1]), d:dot(ax[2]), d:dot(ax[3])
+          if math.abs(lx) < hx + 0.45 and math.abs(ly) < hy + 0.45 and math.abs(lz) < hz + 0.3 then
+            local vs, vc = vec3(unicycle:getVelocityXYZ()), vec3(veh:getVelocityXYZ())
+            local rel = vs - vc
+            local closing = rel:length()
+            if closing >= IMPACT_MIN_MS then
+              impactCooldown[id] = clock + 0.5
+              -- contact: Sonic's position brought onto the vehicle's box
+              local cp = c + ax[1] * clamp(lx, -hx, hx) + ax[2] * clamp(ly, -hy, hy) + ax[3] * clamp(lz, -hz, hz)
+              local ms = 1000 * math.max(0, settings.impactForce)
+              local mc = carMass[id] or 1500
+              local mode = settings.impactMode
+              local dvCar = rel * ((ms / (ms + mc)) * (mode == 'bounce' and 1.6 or 1.15))
+              local dvSonic = vec3(0, 0, 0)
+              if mode == 'mass' then dvSonic = -rel * math.min(1, (mc / (ms + mc)) * 1.15)
+              elseif mode == 'bounce' then dvSonic = -rel * 1.6 end
+              veh:queueLuaCommand(string.format('if sonicfrontiers_impact then sonicfrontiers_impact.hit(%f, %f, %f, %f, %f, %f, %f) end',
+                cp.x, cp.y, cp.z, dvCar.x, dvCar.y, dvCar.z, settings.carDamage))
+              if dvSonic:length() > 0 then unicycle:applyClusterVelocityScaleAdd(unicycle:getRefNodeId(), 1, dvSonic.x, dvSonic.y, dvSonic.z) end
+              pendingImpact = math.max(pendingImpact, closing)
+              lastHit = {kmh = closing * 3.6, mode = mode, kg = mc, sonicLoss = dvSonic:length() * 3.6, car = dvCar:length() * 3.6, vs = vs:length() * 3.6}
+              log('D', logTag, string.format('hit %s (%.0f kg) at %.0f km/h, mode %s', veh:getJBeamFilename(), mc, closing * 3.6, mode))
+            end
+            break
+          end
+        end
+      end
+    end
+  end
+end
+
 local function updateBody(unicycle)
   local id = unicycle:getId()
   local center = vec3(be:getObjectOOBBCenterXYZ(id))
@@ -733,6 +830,7 @@ local function onPreRender(dtReal, dtSim)
       unicycle:queueLuaCommand('if sonicfrontiers_runner then sonicfrontiers_runner.setWater(' .. (wz and string.format('%.3f', wz) or 'nil') .. ') end')
     end
     groundedByRay = updateBody(unicycle)
+    checkImpacts(unicycle)
     rememberSafeSpot(unicycle, groundedByRay or runnerGrounded == 1)
     if sheets.tuning.ringsEnabled == 1 then   -- rings are switched off for now (beamng/sheets/tuning.json)
       spawnRings(bodyFeet, bodyVel)
@@ -817,6 +915,8 @@ sendFrame = function()
   frame.auraLength = settings.auraLength
   frame.water = runnerWater
   frame.waterZ = sentWaterZ or -100000
+  frame.impact = pendingImpact
+  pendingImpact = 0
   frame.trailFade = settings.trailFade
   frame.jumpStyle = settings.jumpStyle
   frame.ballSpin = settings.ballSpin
@@ -847,6 +947,7 @@ end
 
 local function onClientStartMission()
   onFootDone, runnerLoadedFor, hiddenUnicycle, sonicBodyId = false, nil, nil, nil
+  carMass, impactLoaded, impactCooldown, lastImpactPos = {}, {}, {}, nil
   waterObjects, sentWaterZ = nil, false
   notAllowedFor = 0
   safeSpots = {}
@@ -898,6 +999,8 @@ M.isMenuOpen = function() return menuOpen end
 M.onClientStartMission = onClientStartMission
 M.onClientEndMission = onClientEndMission
 M.onRunner = onRunner
+M.setCarMass = function(id, kg) carMass[id] = kg end
+M.getLastHit = function() return lastHit end
 M.getBody = getBody
 -- developer probe: the last frame sent to the renderer
 M.lastFrame = function()
