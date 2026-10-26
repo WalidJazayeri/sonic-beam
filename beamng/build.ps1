@@ -31,7 +31,7 @@ foreach ($lua in Get-ChildItem -Recurse (Join-Path $root 'mod') -Filter *.lua) {
 & $zig cc -target x86_64-windows-gnu -O2 -c (Join-Path $repo 'src\third_party\clhca\clhca.c') -o (Join-Path $out 'clhca.o')
 if ($LASTEXITCODE -ne 0) { throw 'clHCA compilation failed' }
 
-$sources = 'src\main.cpp','src\assets.cpp','src\audio.cpp','src\game.cpp','src\render11.cpp','src\render12.cpp','src\testmode.cpp','src\proxy.cpp','src\link.cpp' | ForEach-Object { Join-Path $root $_ }
+$sources = 'src\main.cpp','src\assets.cpp','src\audio.cpp','src\game.cpp','src\render11.cpp','src\render12.cpp','src\proxy.cpp','src\link.cpp' | ForEach-Object { Join-Path $root $_ }
 $sources += Join-Path $repo 'src\frontiers\anim_acl.cpp'
 $dll = Join-Path $out 'version.dll'
 $log = Join-Path $out 'compile.log'
@@ -58,11 +58,11 @@ New-Item -ItemType Directory -Force (Join-Path $binOut 'SonicBeam\licenses') | O
 Copy-Item $dll (Join-Path $binOut 'version.dll')
 Get-ChildItem (Join-Path $repo 'licenses') | Where-Object Name -notmatch 'Streamline' | Copy-Item -Destination (Join-Path $binOut 'SonicBeam\licenses')
 Copy-Item (Join-Path $repo 'LICENSE') (Join-Path $binOut 'SonicBeam\LICENSE.txt')
-# The readme sits at the archive root (for Melty) and next to the licenses once installed
+# The readme sits at the archive root and next to the licenses once installed
 Copy-Item (Join-Path $root 'README.md') (Join-Path $stage 'README.md')
 Copy-Item (Join-Path $root 'README.md') (Join-Path $binOut 'SonicBeam\README.md')
 Set-Content -Encoding ASCII (Join-Path $binOut 'SonicBeam\VERSION') $Version
-# Manual install for players outside Melty: install.bat / uninstall.bat (backs up and restores)
+# Install for players: install.bat / uninstall.bat (backs up and restores)
 Get-ChildItem (Join-Path $root 'dist') | Copy-Item -Destination $stage
 $zip = Join-Path $out "SonicBeam-$Version.zip"
 Remove-Item -Force $zip -ErrorAction SilentlyContinue

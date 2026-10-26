@@ -98,7 +98,6 @@ M.rings = {
   boost = {trigger = "boost", everySeconds = 0, rings = 5, cooldownSeconds = 6.0, popup = 4},
 }
 M.spawns = {
-  play = {everySeconds = 4.0, minKmh = 10, count = 8, startMeters = 25, spacingMeters = 5.0, heightMeters = 0.9, collectMeters = 1.8, lifetimeSeconds = 25},
-  test = {everySeconds = 2.0, minKmh = 0, count = 6, startMeters = 4, spacingMeters = 3.0, heightMeters = 0.9, collectMeters = 2.2, lifetimeSeconds = 20},
+  run_line = {everySeconds = 4.0, minKmh = 10, count = 8, startMeters = 25, spacingMeters = 5.0, heightMeters = 0.9, collectMeters = 1.8, lifetimeSeconds = 25},
 }
 return M

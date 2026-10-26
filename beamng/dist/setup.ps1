@@ -150,7 +150,7 @@ function Uninstall {
         }
         if ($state.labSettings -and (Test-Path $state.labSettings)) { Remove-Item -Force $state.labSettings; Say "Removed $($state.labSettings)" }
     } else {
-        # No record (installed by hand, or by Melty): remove Sonic Beam's files where they usually are
+        # No record (installed by hand): remove Sonic Beam's files where they usually are
         Say 'No install record found; looking for Sonic Beam in the usual places.'
         if (-not $GameDir) { $GameDir = Find-SteamGame '284160' }
         if (-not $UserDir) { $UserDir = Join-Path $env:LOCALAPPDATA 'BeamNG\BeamNG.drive\current' }

@@ -13,7 +13,7 @@ void log(const char *format, ...);
 std::wstring data_dir();               // %LOCALAPPDATA%\SonicBeam, created on first use
 double now_seconds();
 
-// %LOCALAPPDATA%\SonicBeam\settings.ini; Melty writes `frontiers=<Sonic Frontiers folder>` before every Play.
+// %LOCALAPPDATA%\SonicBeam\settings.ini; the installer (install.bat) writes `frontiers=<Sonic Frontiers folder>`.
 std::wstring setting(const wchar_t *key);
 void save_setting(const wchar_t *key, const std::wstring &value);
 

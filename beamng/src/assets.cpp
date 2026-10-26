@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "assets.hpp"
 #include "common.hpp"
-#include "testmode.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -196,7 +195,6 @@ DWORD WINAPI loader(void *)
 {
     const bool ok = load_all();
     InterlockedExchange(&state, ok ? 2 : 3);
-    if (ok) testmode::report_assets_loaded();
     return 0;
 }
 }

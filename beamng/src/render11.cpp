@@ -23,7 +23,6 @@
 #include "audio.hpp"
 #include "font.hpp"
 #include "game.hpp"
-#include "testmode.hpp"
 #include "render12.hpp"
 #include "shared_draw.hpp"
 
@@ -533,7 +532,7 @@ void draw_frame(IDXGISwapChain *chain)
         bool drew = false;
         if (!r12::draw(scene, data, aspect, drew)) { r.disabled = true; set_status("d3d12 drawing failed"); mod::log("render12: drawing disabled"); return; }
         if (data) set_status("drawing (d3d12)");
-        if (drew && ++r.frames_drawn == 300) { mod::log("render: Sonic drawn in 300 frames"); testmode::report_frames_drawn(); }
+        if (drew && ++r.frames_drawn == 300) mod::log("render: Sonic drawn in 300 frames");
         return;
     }
     if (data && !r.uploaded) {
@@ -660,10 +659,7 @@ void draw_frame(IDXGISwapChain *chain)
     }
     r.context->SwapDeviceContextState(previous, nullptr);
     release(previous);
-    if (drew_sonic && ++r.frames_drawn == 300) {
-        mod::log("render: Sonic drawn in 300 frames");
-        testmode::report_frames_drawn();
-    }
+    if (drew_sonic && ++r.frames_drawn == 300) mod::log("render: Sonic drawn in 300 frames");
 }
 
 HRESULT STDMETHODCALLTYPE on_present(IDXGISwapChain *self, UINT interval, UINT flags)
@@ -737,7 +733,6 @@ extern "C" int sb_start()
     if (InterlockedCompareExchange(&hooked, 1, 0) != 0) return 1;
     mod::log("Sonic Beam renderer %s started in BeamNG", SB_VERSION);
     start_link();
-    testmode::start();
     assets::start_loading();
     return 1;
 }

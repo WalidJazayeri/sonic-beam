@@ -69,14 +69,12 @@ typedef struct {
   int32_t ringCount;
   float rings[768];
 } SonicBeamPacket;
-typedef struct { uint32_t magic; int32_t testActive; int32_t rings; } SonicBeamStatus;
 ]]
 local HEADER_BYTES = ffi.offsetof('SonicBeamPacket', 'rings')
 local frame = ffi.new('SonicBeamPacket')
 frame.magic = 0x31464253
 local udp
 local linkFailed = false
-local lastStatus = -100
 
 local onFootDone = false          -- Sonic starts each map on foot once; after that F is the player's choice
 local runnerLoadedFor = nil
@@ -131,8 +129,6 @@ local lastSpawn = -100
 local clock = 0
 local pickedThisFrame = 0
 local bodyFeet, bodyVel = nil, vec3()
-local testMode = false
-local autopilotSent = nil
 local settingsSent = nil
 local camPose = {fresh = false}   -- set by the sonicfrontiersChase camera for this frame
 local notAllowedFor = 0            -- seconds Sonic has not been allowed to start the map on foot
@@ -517,20 +513,6 @@ local function openRenderer()
   return true
 end
 
-local function readStatus()
-  for _ = 1, 8 do
-    local data = udp:receive()
-    if not data then break end
-    if #data >= ffi.sizeof('SonicBeamStatus') then
-      local st = ffi.cast('const SonicBeamStatus *', data)
-      if st.magic == 0x31534253 then
-        testMode = st.testActive == 1
-        lastStatus = clock
-      end
-    end
-  end
-  if clock - lastStatus > 5 then testMode = false end
-end
 -- distance down to the ground from a point (nil when nothing within range)
 local function groundBelow(pos, range)
   local d = castRayStatic(pos, down, range)
@@ -555,7 +537,6 @@ end
 
 -- Whether Sonic drives the walker now (the player's choice in the O menu, 'Sonic: Auto/Always/Off')
 local function sonicAllowed()
-  if testMode then return true end
   if settings.sonicMode == 'off' then return false end
   if settings.sonicMode == 'always' then return true end
   return plainFreeRoam()
@@ -697,7 +678,7 @@ local function updateBody(unicycle)
 end
 
 local function spawnRings(feet, vel)
-  local row = testMode and sheets.spawns.test or sheets.spawns.play
+  local row = sheets.spawns.run_line
   local speedKmh = math.sqrt(vel.x * vel.x + vel.y * vel.y) * 3.6
   if clock - lastSpawn < row.everySeconds / math.max(1, speedKmh / 240) or speedKmh < row.minKmh or #rings + row.count > MAX_RINGS then return end
   lastSpawn = clock
@@ -728,7 +709,7 @@ local function segmentDistance(p, a, b)
 end
 
 local function updateRings(feet)
-  local row = testMode and sheets.spawns.test or sheets.spawns.play
+  local row = sheets.spawns.run_line
   local from = prevFeet or feet
   if (feet - from):length() > 200 then from = feet end   -- teleport, not running
   prevFeet = vec3(feet)
@@ -796,12 +777,11 @@ local function onPreRender(dtReal, dtSim)
   if not openRenderer() then return end
   if frameReady then sendFrame() end   -- onDrawDebug did not run last frame
   clock = clock + (dtReal or 0)
-  readStatus()
   local allowed = sonicAllowed()
   -- BeamNG settles its game state a moment after the map appears: only give up putting the player
   -- on foot once a non-free-roam state has held for 3 s (then never pull them out of a car later)
   -- only plain free roam puts the player on foot: elsewhere ('Always') Sonic waits until they get out
-  if allowed and (testMode or plainFreeRoam()) then
+  if allowed and plainFreeRoam() then
     notAllowedFor = 0
     ensureOnFoot()
   elseif getPlayerVehicle(0) then
@@ -814,7 +794,7 @@ local function onPreRender(dtReal, dtSim)
       -- hand the walking body back to BeamNG
       unicycle:queueLuaCommand('if sonicfrontiers_runner then sonicfrontiers_runner.setEnabled(false) end')
       unicycle:setMeshAlpha(1, '')
-      sonicBodyId, hiddenUnicycle, runnerLoadedFor, settingsSent, autopilotSent = nil, nil, nil, nil, nil
+      sonicBodyId, hiddenUnicycle, runnerLoadedFor, settingsSent = nil, nil, nil, nil
     end
     unicycle = nil
   end
@@ -824,7 +804,6 @@ local function onPreRender(dtReal, dtSim)
     local id = unicycle:getId()
     if runnerLoadedFor ~= id then
       runnerLoadedFor = id
-      autopilotSent = nil
       sentWaterZ = false
       sonicBodyId = id
       unicycle:queueLuaCommand("extensions.load('sonicfrontiers_runner') if sonicfrontiers_runner then sonicfrontiers_runner.setEnabled(true) end")
@@ -835,10 +814,6 @@ local function onPreRender(dtReal, dtSim)
         tostring(settings.speedCapOn), settings.speedCapKmh, settings.boostRampKmhPerSecond, settings.jumpHeight,
         tostring(settings.runOnWater), settings.waterRunKmh, settings.swimKmh,
         tostring(settings.runOnWalls), settings.wallRunKmh, settings.wallGrip))
-    end
-    if autopilotSent ~= testMode then
-      autopilotSent = testMode
-      unicycle:queueLuaCommand('if sonicfrontiers_runner then sonicfrontiers_runner.setAutopilot(' .. tostring(testMode) .. ') end')
     end
     -- BeamNG 0.40.1's walker is a whole character, and the game shows its meshes again on its own
     -- (camera changes, physics resets): hide them again on those events and twice a second anyway

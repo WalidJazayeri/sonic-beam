@@ -67,6 +67,5 @@ struct Scene {
 
 // frame: latest data from Lua (null before the first one). aspect: back buffer width / height.
 void update(const assets::Data *data, const SbFrame *frame, double now, float aspect, Scene &scene);
-int ring_total();
 
 } // namespace game

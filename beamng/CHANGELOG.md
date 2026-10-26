@@ -5,6 +5,10 @@ Versions au format `vMAJEUR.MINEUR.PATCH` (le numéro est dans `beamng/VERSION`,
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## v0.12.3
+- Melty retiré : plus de mode test Melty dans le moteur de rendu (fichier de test surveillé, vérifications, état écrit pour Melty), plus de pilote automatique de test dans le Lua, plus de réponse du moteur de rendu au script (elle ne servait qu'à signaler un test en cours), feuille `tests.json` supprimée. Le jeu normal ne change pas.
+- Mode superposé mis en pause : le travail continue sur le mode natif, dans le dossier `natif/`.
+
 ## v0.12.2
 - Gel du jeu corrigé : le test des chocs avec les véhicules balayait la trajectoire de Sonic en un nombre de points qui suivait sa vitesse, sans plafond ; une vitesse aberrante (corps qui vient d'apparaître, instabilité) en faisait une boucle quasi infinie. Le balayage est plafonné et ignoré quand la vitesse n'a pas de sens.
 - Course sur les murs : toutes les directions calculées sur le mur sont protégées contre les vecteurs nuls ou invalides (ils pouvaient faire exploser le corps), et Sonic ne pousse plus un corps dont la vitesse est invalide.

@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: MIT
 // The mod's Lua talks to the renderer over a loopback UDP socket (BeamNG's Lua has LuaSocket but
-// no native calls). Each packet is one frame: camera, Sonic's body, events and the rings; the
-// renderer answers with whether a Melty test is running, so the Lua can use the test layout.
+// no native calls). Each packet is one frame: camera, Sonic's body, events and the rings.
 #include "common.hpp"
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <algorithm>
 #include <cstring>
 #include <vector>
-#include "testmode.hpp"
-#include "game.hpp"
 
 extern "C" void sb_frame(const SbFrame *frame);   // render11.cpp
 void hook_graphics();                             // render11.cpp
@@ -18,7 +15,6 @@ namespace {
 
 constexpr uint16_t kPort = 47613;
 constexpr uint32_t kFrameMagic = 0x31464253;     // "SBF1"
-constexpr uint32_t kStatusMagic = 0x31534253;    // "SBS1"
 
 #pragma pack(push, 4)
 struct Packet {
@@ -43,7 +39,6 @@ struct Packet {
     int32_t ringCount;
     // followed by ringCount * 3 floats
 };
-struct Status { uint32_t magic; int32_t testActive, rings; };
 #pragma pack(pop)
 
 DWORD WINAPI listener(void *)
@@ -62,9 +57,7 @@ DWORD WINAPI listener(void *)
     std::vector<float> rings;
     bool first = true;
     for (;;) {
-        sockaddr_in from{};
-        int from_len = sizeof(from);
-        const int n = recvfrom(s, buffer.data(), int(buffer.size()), 0, reinterpret_cast<sockaddr *>(&from), &from_len);
+        const int n = recv(s, buffer.data(), int(buffer.size()), 0);
         if (n < int(sizeof(Packet))) continue;
         Packet p;
         std::memcpy(&p, buffer.data(), sizeof(p));
@@ -87,8 +80,6 @@ DWORD WINAPI listener(void *)
         f.ringCount = count; f.ringPos = rings.data();
         sb_frame(&f);
         if (first) { first = false; mod::log("link: first frame from the Sonic Beam script"); hook_graphics(); }
-        const Status reply{kStatusMagic, testmode::active() ? 1 : 0, game::ring_total()};
-        sendto(s, reinterpret_cast<const char *>(&reply), sizeof(reply), 0, reinterpret_cast<sockaddr *>(&from), from_len);
     }
 }
 } // namespace

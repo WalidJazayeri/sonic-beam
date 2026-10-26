@@ -86,7 +86,7 @@
       "id": "native_link",
       "side": "native",
       "target": "UDP 127.0.0.1:47613",
-      "purpose": "receive each frame from the Lua and answer with the Melty test state",
+      "purpose": "receive each frame from the Lua and pass it to sb_frame",
       "implementation": "listener",
       "verified": true
     },

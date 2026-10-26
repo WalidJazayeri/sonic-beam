@@ -3,7 +3,6 @@
 // XAudio2 2.9, which ships with Windows 10 and 11.
 #include "audio.hpp"
 #include "common.hpp"
-#include "testmode.hpp"
 #include <xaudio2.h>
 #include <algorithm>
 #include <cmath>
@@ -67,7 +66,7 @@ void play(sheets::Sound sound, float pitch)
     buffer.AudioBytes = UINT32(pcm.samples.size() * sizeof(int16_t));
     buffer.pAudioData = reinterpret_cast<const BYTE *>(pcm.samples.data());
     buffer.Flags = XAUDIO2_END_OF_STREAM;
-    if (SUCCEEDED(v.voice->SubmitSourceBuffer(&buffer)) && SUCCEEDED(v.voice->Start())) testmode::report_sound_played();
+    if (SUCCEEDED(v.voice->SubmitSourceBuffer(&buffer))) v.voice->Start();
 }
 
 void loop(sheets::Sound sound, float level, float pitch, float extra_db)

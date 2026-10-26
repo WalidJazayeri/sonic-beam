@@ -37,7 +37,6 @@ local groundGap = math.huge    -- metres from the ball's bottom down to the grou
 local snapLock = 0             -- seconds left without ground snap (after a jump)
 local ballCenter, ballRadius = nil, 0
 local up = vec3(0, 0, 1)
-local autopilot, autoTime = false, 0
 local walker = nil             -- BeamNG's playerController and its original functions
 local original = nil           -- BeamNG's own playerController input functions
 local enabled = true           -- false outside plain free roam: the body is BeamNG's own walker again
@@ -455,13 +454,6 @@ end
 local function updateGFX(dt)
   if not wrapped then wrapPlayerController() end
   if not enabled then return end
-  if autopilot then
-    -- Melty test runs with nobody at the keyboard: run, weave, boost and jump on a loop.
-    autoTime = autoTime + dt
-    walkY, walkX = 1, math.sin(autoTime * 0.5) * 0.35
-    boostHeld = (autoTime % 12) > 5 and 1 or 0
-    if autoTime % 7 < dt then jumpQueued = true end
-  end
   if ballCenter then
     local c = obj:getPosition() + obj:getNodePosition(ballCenter)
     local d = obj:castRayStatic(c, vec3(0, 0, -1), ballRadius + P.snapMeters + 0.5)
@@ -557,18 +549,21 @@ M.getDebug = function() return debugInfo end
 -- BeamNG's own walker: its speeds, jump, air drag, ball grip and stick input are restored.
 M.setEnabled = function(on)
   on = on and true or false
-  if on == enabled then return end
-  if not on then setGlide(false) end
-  enabled = on
-  jumpTimer, jumpWait, jumpQueued, speedTarget, learnedPush = 0, 0, false, 0, 0
-  if walker then walker.pc.init(on and walker.sonicData or walker.beamngData) end
-  setAirDrag(on and P.aeroScale or 1)
-  if original then
-    original.walkUpDownRaw(walkY)
-    original.walkLeftRightRaw(walkX)
-    original.setSpeedCoef(on and 0 or boostHeld)
+  if on ~= enabled then
+    if not on then setGlide(false) end
+    enabled = on
+    jumpTimer, jumpWait, jumpQueued, speedTarget, learnedPush = 0, 0, false, 0, 0
+    if walker then walker.pc.init(on and walker.sonicData or walker.beamngData) end
+    setAirDrag(on and P.aeroScale or 1)
+    if original then
+      original.walkUpDownRaw(walkY)
+      original.walkLeftRightRaw(walkX)
+      original.setSpeedCoef(on and 0 or boostHeld)
+    end
+    log('I', 'sonicfrontiers', on and 'Sonic takes over the walking body' or 'walking body handed back to BeamNG')
   end
-  log('I', 'sonicfrontiers', on and 'Sonic takes over the walking body' or 'walking body handed back to BeamNG')
+  -- each time he takes the body Sonic starts from released keys: no walk or boost carried over
+  if on then walkX, walkY, boostHeld = 0, 0, 0 end
 end
 M.setSpeedSettings = function(capOn, capKmh, rampKmhPerSecond, jumpHeight, runOnWater, waterRunKmh, swimKmh, runOnWalls, wallRunKmh, wallGripSeconds)
   if runOnWalls ~= nil then wallRunOn = runOnWalls and true or false end
@@ -586,11 +581,5 @@ M.setSpeedSettings = function(capOn, capKmh, rampKmhPerSecond, jumpHeight, runOn
 end
 -- the water surface under Sonic, from the map's water objects (nil: none)
 M.setWater = function(z) waterZ = z end
-M.setAutopilot = function(on)
-  autopilot = on and true or false
-  autoTime = 0
-  if not autopilot then walkX, walkY, boostHeld = 0, 0, 0 end
-  log('I', 'sonicfrontiers', 'autopilot ' .. tostring(autopilot))
-end
 
 return M

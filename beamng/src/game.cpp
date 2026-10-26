@@ -7,7 +7,6 @@
 #include <cstdio>
 #include <cstring>
 #include "audio.hpp"
-#include "testmode.hpp"
 
 namespace game {
 
@@ -130,7 +129,7 @@ struct State {
     V3 burst_pos;
     float speed_kmh = 0, shown_kmh = 0, heading = 0, turn_rate = 0, lean = 0;
     bool heading_set = false, air = false;
-    double ground_lost = 0, air_time = 0, run_time = 0, last_frame = 0, first_shown = -1;
+    double ground_lost = 0, air_time = 0, last_frame = 0, first_shown = -1;
     std::vector<float> scratch;
 } s;
 
@@ -160,8 +159,6 @@ void add_text(Scene &scene, float x, float y, float size, float r, float g, floa
     scene.texts.push_back({x, y, size, {r, g, b, a}, text});
 }
 } // namespace
-
-int ring_total() { return s.rings; }
 
 void update(const assets::Data *d, const SbFrame *f, double now, float aspect, Scene &scene)
 {
@@ -315,14 +312,9 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
         }
     }
     s.was_boosting = boosting;
-    if (boosting && s.speed_kmh > 100) testmode::report_boosting();
     for (int i = 0; i < f->picked; ++i) {
         s.last_pay[int(RingRule::pickup)] = -100;
         pay(RingRule::pickup, ringRules[int(RingRule::pickup)].rings, now, origin);
-    }
-    if ((s.state == int(sheets::State::run) || boosting) && s.speed_kmh > 25) {
-        s.run_time += dt;
-        if (s.run_time > 2.0) testmode::report_running();
     }
 
     // ---------------- animation
@@ -744,15 +736,6 @@ void update(const assets::Data *d, const SbFrame *f, double now, float aspect, S
             add_text(scene, -0.62f, 0.64f, 0.030f, 0.85f, 0.9f, 1, a, rings_on ? "MOUSE: CAMERA   F: CAR IN/OUT   O: SPEED MENU   RUN THROUGH THE RINGS"
                                                                               : "MOUSE: CAMERA   F: CAR IN/OUT   O: SPEED MENU");
         }
-    }
-    static double next_state = 0;
-    if (now >= next_state) {
-        next_state = now + 0.25;
-        char json[384];
-        std::snprintf(json, sizeof(json),
-                      "{\"state\":\"%s\",\"speed\":%.1f,\"air\":%d,\"airTime\":%.2f,\"boost\":%d,\"rings\":%d,\"ringsAhead\":%d,\"onFoot\":%d,\"x\":%.1f,\"y\":%.1f,\"z\":%.1f}",
-                      states[s.state].id, s.speed_kmh, int(s.air), s.air_time, f->boost, s.rings, f->ringCount, f->onFoot, feet.x, feet.y, feet.z);
-        testmode::write_state(json);
     }
 }
 
