@@ -2,7 +2,8 @@
 // COLLADA 1.4.1 writer for a Rig, laid out like the game's own skinned shapes (scarecrow.dae):
 // Z_UP, meters, base00 > start01 > {armature of JOINT nodes, one <object>2 node per mesh}.
 // Joints carry <matrix sid="transform"> (bind local); animated joints get one <animation> of baked
-// float4x4 locals on the shared timeline. Split modes:
+// float4x4 locals on the shared timeline. A rig without joints (the spin ball shell) is written as rigid
+// <instance_geometry> under start01, with no controllers and no armature. Split modes:
 //   clips  one <animation_clip name=...> per clip with Torque's cyclic extra
 //   cs     no clips (Torque folds everything into 'ambient'); a TSShapeConstructor .cs splits it
 //   bind   no animation at all (diagnostic)
@@ -111,10 +112,13 @@ inline std::string write_dae(const Rig &rig, const DaeInfo &info)
     t << "  </library_geometries>\n";
 
     // Skin: Name_array = joint sids, INV_BIND_MATRIX in the same order, weights indexed by byte value (k/255).
+    // A rigid mesh (no joints) has no controller; with none at all the library is left out (it may not be empty).
     float weights[256];
     for (int k = 0; k < 256; ++k) weights[k] = k / 255.0f;
-    t << "  <library_controllers>\n";
+    const bool skinned = std::any_of(rig.meshes.begin(), rig.meshes.end(), [](const RigMesh &m) { return !m.joints.empty(); });
+    if (skinned) t << "  <library_controllers>\n";
     for (auto &m : rig.meshes) {
+        if (m.joints.empty()) continue;
         const std::string c = m.object + "-skin";
         t << "    <controller id=\"" << c << "\" name=\"" << c << "\">\n      <skin source=\"#" << m.object << "-mesh\">\n"
              "        <bind_shape_matrix>1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</bind_shape_matrix>\n";
@@ -136,7 +140,7 @@ inline std::string write_dae(const Rig &rig, const DaeInfo &info)
         for (size_t i = 0; i < m.influences.size(); i += 2) { if (i) t << ((i % 32) ? ' ' : '\n'); t.u(m.influences[i]) << ' '; t.u(m.influences[i + 1]); }
         t << "</v>\n        </vertex_weights>\n      </skin>\n    </controller>\n";
     }
-    t << "  </library_controllers>\n";
+    if (skinned) t << "  </library_controllers>\n";
 
     if (info.split != Split::bind && rig.total_frames) {
         std::vector<float> times(rig.total_frames);
@@ -179,16 +183,24 @@ inline std::string write_dae(const Rig &rig, const DaeInfo &info)
 
     t << "  <library_visual_scenes>\n    <visual_scene id=\"Scene\" name=\"Scene\">\n"
          "      <node id=\"base00\" name=\"base00\" type=\"NODE\">\n        <matrix sid=\"transform\">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</matrix>\n"
-         "        <node id=\"start01\" name=\"start01\" type=\"NODE\">\n          <matrix sid=\"transform\">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</matrix>\n"
-         "          <node id=\"" << info.armature << "\" name=\"" << info.armature << "\" type=\"NODE\">\n"
-         "            <matrix sid=\"transform\">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</matrix>\n";
-    dae::joint_tree(t, rig, -1, 6);
-    t << "          </node>\n";
+         "        <node id=\"start01\" name=\"start01\" type=\"NODE\">\n          <matrix sid=\"transform\">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</matrix>\n";
+    if (!rig.joints.empty()) {
+        t << "          <node id=\"" << info.armature << "\" name=\"" << info.armature << "\" type=\"NODE\">\n"
+             "            <matrix sid=\"transform\">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</matrix>\n";
+        dae::joint_tree(t, rig, -1, 6);
+        t << "          </node>\n";
+    }
     for (auto &m : rig.meshes) {
         // Trailing number = detail size: <object>2 is drawn down to 2 px on screen.
         t << "          <node id=\"" << m.object << "2\" name=\"" << m.object << "2\" type=\"NODE\">\n"
-             "            <matrix sid=\"transform\">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</matrix>\n"
-             "            <instance_controller url=\"#" << m.object << "-skin\">\n";
+             "            <matrix sid=\"transform\">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</matrix>\n";
+        if (m.joints.empty()) {   // rigid: plain geometry
+            t << "            <instance_geometry url=\"#" << m.object << "-mesh\">\n"
+                 "              <bind_material><technique_common><instance_material symbol=\"" << m.material << "-material\" target=\"#"
+              << m.material << "-material\"/></technique_common></bind_material>\n            </instance_geometry>\n          </node>\n";
+            continue;
+        }
+        t << "            <instance_controller url=\"#" << m.object << "-skin\">\n";
         // Joint sids are looked up under <skeleton>: the root joint, or the armature when the tree is flat.
         if (rig.flat) t << "              <skeleton>#" << info.armature << "</skeleton>\n";
         else for (auto &j : rig.joints) if (j.parent < 0) t << "              <skeleton>#j_" << j.sid << "</skeleton>\n";

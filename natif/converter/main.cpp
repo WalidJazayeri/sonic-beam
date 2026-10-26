@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // sonicnative_convert: turns Sonic from the player's own Sonic Frontiers install into a skinned,
-// animated COLLADA shape, BeamNG materials, DDS textures and WAV sounds inside the BeamNG user folder
-// (<userpath>\current\mods\sonicnative_data). Nothing it writes belongs in the repository or a package.
+// animated COLLADA shape (every clip the overlay mode plays), a still shape of his spin ball shell, BeamNG
+// materials, DDS textures and WAV sounds inside the BeamNG user folder (<userpath>\current\mods\sonicnative_data).
+// Nothing it writes belongs in the repository or a package.
 #include <algorithm>
 #include <cstdio>
 #include <cwctype>
@@ -35,32 +36,39 @@ namespace {
 const char *const kVersion = SN_STR(SONICNATIVE_VERSION);
 const char *const kDataFolder = "sonicnative_data";     // <userpath>\current\mods\<this>, VFS /mods/<this>
 
+// A shape text above this makes BeamNG's first load (COLLADA parse, then the .cdae cache) slow.
+constexpr double kShapeWarnBytes = 40.0 * 1024 * 1024;
+
 struct Options {
-    std::wstring userpath, frontiers;
+    std::wstring userpath, frontiers, out;
     std::string clips = sonic_data::kDefaultClips;
     Split split = Split::clips;
-    bool fixture = false, bind_only = false, flip_green = false, srgb = true, flat = false, uv_clamp = true, sounds = true;
+    bool fixture = false, bind_only = false, flip_green = false, srgb = true, flat = false, uv_clamp = true, sounds = true, ball = true;
 };
 
 void usage()
 {
     std::printf("sonicnative_convert %s\n"
                 "usage: sonicnative_convert --userpath <BeamNG user folder> [--frontiers <Sonic Frontiers folder>]\n"
-                "                           [--clips %s] [--split clips|cs] [--bind-only] [--flat] [--flip-green] [--no-srgb]\n"
-                "                           [--no-uv-clamp] [--no-sounds] [--fixture]\n"
+                "                           [--clips <ids>] [--split clips|cs] [--bind-only] [--flat] [--flip-green] [--no-srgb]\n"
+                "                           [--no-uv-clamp] [--no-sounds] [--no-ball] [--fixture] [--out <folder>]\n"
                 "  --userpath    the folder BeamNG runs with (-userpath); output goes to <it>\\current\\mods\\%s\n"
                 "  --frontiers   default: frontiers= line of %%LOCALAPPDATA%%\\SonicBeam\\settings.ini\n"
-                "  --clips       clip ids (", kVersion, sonic_data::kDefaultClips, kDataFolder);
-    for (size_t i = 0; i < sizeof(sonic_data::kClips) / sizeof(sonic_data::kClips[0]); ++i) std::printf("%s%s", i ? ", " : "", sonic_data::kClips[i].id);
-    std::printf(")\n"
-                "  --split       clips: one <animation_clip> per clip (default); cs: one 'ambient' + a TSShapeConstructor .cs\n"
+                "  --clips       comma-separated clip ids, default all of them:\n                %s\n",
+                kVersion, kDataFolder, sonic_data::kDefaultClips);
+    std::printf("  --split       clips: one <animation_clip> per clip (default); cs: one 'ambient' + a TSShapeConstructor .cs\n"
                 "  --bind-only   no animation (diagnostic: bind pose only)\n"
                 "  --flat        every joint under the armature with model-space locals (no inherited scale or shear)\n"
                 "  --flip-green  invert the green channel of the BC5 normal maps (lossless)\n"
                 "  --no-srgb     keep the albedo headers as they are (UNORM)\n"
                 "  --no-uv-clamp keep UVs outside [0,1] on clamp-addressed textures (eyes) as they are\n"
                 "  --no-sounds   leave Sonic's sounds out (default: every waveform of his sound cues as WAV into %s\\sounds)\n"
-                "  --fixture     synthetic 2-joint test shape (clips idle, lean) into %s\\fixture, no Frontiers data, no sounds\n", kDataFolder, kDataFolder);
+                "  --no-ball     leave the spin ball shell out (default: a second, still shape sonic\\ball_<hash>.dae)\n"
+                "  --fixture     synthetic 2-joint test shape (clips idle, lean) into %s\\fixture, no Frontiers data, no sounds\n"
+                "  --out         write the package into this folder instead of the user folder, for inspection: no BeamNG\n"
+                "                cache is touched, so it also runs while BeamNG does (--userpath is then not needed);\n"
+                "                never a mods\\%s folder nor one inside the repository\n",
+                kDataFolder, kDataFolder, kDataFolder);
 }
 
 bool beamng_running()
@@ -82,6 +90,47 @@ std::wstring trim_folder(std::wstring dir)
     while (!dir.empty() && (dir.back() == L'\\' || dir.back() == L' ' || dir.back() == L'\r' || dir.back() == L'"')) dir.pop_back();
     while (!dir.empty() && (dir.front() == L' ' || dir.front() == L'"')) dir.erase(dir.begin());
     return dir;
+}
+
+// A folder's absolute, resolved spelling, lower-cased (Windows paths ignore case), for comparisons.
+std::wstring folder_key(const fs::path &dir)
+{
+    std::error_code ec;
+    const fs::path abs = fs::absolute(dir, ec);
+    fs::path c = fs::weakly_canonical(abs, ec);
+    if (ec || c.empty()) c = abs.lexically_normal();
+    std::wstring s = c.make_preferred().wstring();
+    if (s.compare(0, 4, L"\\\\?\\") == 0) s.erase(0, 4);
+    for (auto &ch : s) ch = wchar_t(towlower(ch));
+    while (s.size() > 3 && s.back() == L'\\') s.pop_back();
+    return s;
+}
+
+// The repository the converter was built in (<repo>\natif\build\sonicnative_convert.exe), empty when it runs from elsewhere.
+std::wstring repo_key()
+{
+    wchar_t exe[MAX_PATH * 4];
+    const DWORD n = GetModuleFileNameW(nullptr, exe, DWORD(sizeof(exe) / sizeof(exe[0])));
+    if (!n || n >= sizeof(exe) / sizeof(exe[0])) return {};
+    const fs::path repo = fs::path(exe).parent_path().parent_path().parent_path();
+    std::error_code ec;
+    if (!fs::is_regular_file(repo / L"natif" / L"converter" / L"main.cpp", ec)) return {};
+    return folder_key(repo);
+}
+
+// Why --out may not write into this folder (empty: it may). The live package is rewritten only through
+// --userpath (BeamNG closed, shape cache cleared), and nothing from Frontiers ever lands in the repository.
+std::string out_refusal(const std::wstring &out)
+{
+    const std::wstring key = folder_key(out);
+    const std::wstring live = L"\\mods\\" + widen(kDataFolder);
+    for (size_t at = key.find(live); at != std::wstring::npos; at = key.find(live, at + 1))
+        if (at + live.size() == key.size() || key[at + live.size()] == L'\\')
+            return std::string("a BeamNG mods\\") + kDataFolder + " folder: convert into it with --userpath, BeamNG closed";
+    const std::wstring repo = repo_key();
+    if (!repo.empty() && key.compare(0, repo.size(), repo) == 0 && (key.size() == repo.size() || key[repo.size()] == L'\\' || repo.back() == L'\\'))
+        return "inside the repository, where nothing from Sonic Frontiers belongs";
+    return {};
 }
 
 // The overlay's settings file names the Frontiers folder (frontiers=C:/games/Sonic Frontiers).
@@ -148,12 +197,22 @@ struct Package {
     std::string stem;                // <stem>_<hash>.dae
     std::string materials_file, datablocks_file, datablock, ctor;
     std::string materials_json;
-    std::vector<TextureOut> textures;
+    std::vector<TextureOut> textures;    // Sonic's and the ball's (tex/sonicnative_*)
     float model_height = 1;
     Rig rig;
     bool with_sounds = false;        // the sounds step ran: sounds/ is rewritten and the manifest lists it
     std::vector<SoundOut> sounds;
+    // The spin ball shell: a second, rigid shape in the same folder (ball_<hash>.dae), its own materials
+    bool with_ball = false;
+    Rig ball;
+    std::string ball_materials_json;
+    float ball_radius = 0;           // model units, around the shell's middle (its origin)
 };
+
+const char *const kBallStem = "ball";
+const char *const kBallMaterialsFile = "sonicnative_ball.materials.json";
+const char *const kBallDatablocksFile = "sonicnative_ball.datablocks.json";
+const char *const kBallDatablock = "sonicnative_ball_db";
 
 std::string vfs(const Package &p, const std::string &file) { return std::string("/mods/") + kDataFolder + "/" + p.folder + "/" + file; }
 std::string sounds_vfs() { return std::string("/mods/") + kDataFolder + "/sounds/"; }
@@ -204,7 +263,8 @@ std::string manifest_json(const Package &p, const Options &o, const std::string 
     const Split split = o.bind_only ? Split::bind : o.split;
     std::string s = "{\n";
     s += "  \"about\": \"Written by sonicnative_convert from the player's Sonic Frontiers install. Z up, +Y forward, meters. "
-         "Torque plays a cyclic clip of n keys over seqSeconds = (n-1)/fps; Frontiers loops last loopSeconds = n/fps.\",\n";
+         "Torque plays a cyclic clip of n keys over seqSeconds = (n-1)/fps; Frontiers loops last loopSeconds = n/fps. "
+         "A one-shot (loop false) keeps all its keys and ends on its last pose. blendSeconds is the overlay's cross-fade into the clip.\",\n";
     s += "  \"converter\": " + json_escape(kVersion) + ",\n  \"hash\": " + json_escape(hash) + ",\n";
     s += "  \"shape\": " + json_escape(vfs(p, dae_file)) + ",\n";
     s += "  \"materials\": " + json_escape(vfs(p, p.materials_file)) + ",\n";
@@ -228,13 +288,27 @@ std::string manifest_json(const Package &p, const Options &o, const std::string 
             for (float at : c.steps) steps += (steps.empty() ? "" : ", ") + json_num(at);
             s += "{\"name\": " + json_escape(c.name) + ", \"frames\": " + std::to_string(c.frames) + ", \"fps\": " + json_num(rig.fps) +
                  ", \"loop\": " + (c.loop ? "true" : "false") + ", \"refKmh\": " + json_num(c.ref_kmh) + ", \"minRate\": " + json_num(c.min_rate) +
-                 ", \"maxRate\": " + json_num(c.max_rate) + ", \"first\": " + std::to_string(c.first) +
+                 ", \"maxRate\": " + json_num(c.max_rate) + ", \"blendSeconds\": " + json_num(c.blend_seconds) + ", \"first\": " + std::to_string(c.first) +
                  ", \"seqSeconds\": " + json_num((c.frames - 1) / rig.fps) + ", \"loopSeconds\": " + json_num((c.loop ? c.frames : c.frames - 1) / rig.fps) +
                  ", \"steps\": [" + steps + "]}";
         }
         if (!rig.clips.empty()) s += "\n  ";
     }
     s += "]";
+    // The spin ball shell: origin on its middle, Sonic's axes and scale; the overlay sets its middle pivotHeight
+    // meters above Sonic's feet and turns it about Sonic's right axis once per spinSeconds; Sonic is hidden inside.
+    if (p.with_ball) {
+        const double scale = sonic_data::kHeightMeters / p.model_height;
+        size_t bverts = 0, btris = 0;
+        for (auto &m : p.ball.meshes) { bverts += m.positions.size() / 3; btris += m.triangles.size() / 3; }
+        s += ",\n  \"ball\": {\"shape\": " + json_escape(vfs(p, std::string(kBallStem) + "_" + hash + ".dae")) +
+             ", \"materials\": " + json_escape(vfs(p, kBallMaterialsFile)) + ", \"datablocks\": " + json_escape(vfs(p, kBallDatablocksFile)) +
+             ",\n    \"datablock\": " + json_escape(kBallDatablock) + ", \"scale\": " + json_num(scale) +
+             ", \"spinSeconds\": " + json_num(1.0 / sonic_data::kBallTurnsPerSecond) +
+             ", \"pivotHeight\": " + json_num(sonic_data::kHeightMeters * sonic_data::kBallPivotShare) +
+             ", \"radius\": " + json_num(p.ball_radius * scale) +
+             ", \"vertices\": " + std::to_string(bverts) + ", \"triangles\": " + std::to_string(btris) + "}";
+    }
     // Sounds: random = one file per play, layers = all files together; a loop loops each whole file.
     if (p.with_sounds) s += ",\n  \"sounds\": " + sounds_json(p.sounds, sounds_vfs());
     s += "\n}\n";
@@ -257,28 +331,40 @@ size_t remove_stale(const fs::path &dir, const std::wstring &prefix, std::initia
     return count;
 }
 
-bool write_package(const fs::path &user, const Package &p, const Options &o, const std::string &hash)
+// data: <userpath>\current\mods\sonicnative_data, or the --out folder; cache: BeamNG's shape cache for it
+// (<userpath>\current\temp\mods\sonicnative_data), empty with --out.
+bool write_package(const fs::path &data, const fs::path &cache, const Package &p, const Options &o, const std::string &hash)
 {
-    const fs::path data = user / L"current" / L"mods" / widen(kDataFolder);
     const fs::path dir = data / widen(p.folder);
-    const fs::path cache = user / L"current" / L"temp" / L"mods" / widen(kDataFolder);
     const std::string dae_file = p.stem + "_" + hash + ".dae";
+    const std::string ball_file = std::string(kBallStem) + "_" + hash + ".dae";
     const fs::path manifest = o.fixture ? dir / L"manifest.json" : data / L"manifest.json";
     std::error_code ec;
     // The manifest goes first and comes back last: a run that fails in between leaves no manifest
     // (the mod then asks for a conversion), never one naming files the cleanup removed.
     if (!fs::remove(manifest, ec) && ec) { std::printf("error: cannot remove %s: %s\n", narrow(manifest.wstring()).c_str(), ec.message().c_str()); return false; }
-    // Stale shapes and caches next: BeamNG may prefer an old .cdae to a new .dae.
+    // Stale shapes and caches next: BeamNG may prefer an old .cdae to a new .dae. An old ball goes even when
+    // this run has none, so no shape outlives the manifest that named it.
     const fs::path sounds = data / L"sounds";
     const size_t stale = remove_stale(dir, widen(p.stem + "_"), {L".dae", L".cdae", L".cs"}) +
+                         remove_stale(dir, widen(std::string(kBallStem) + "_"), {L".dae", L".cdae"}) +
                          remove_stale(dir / L"tex", L"sonicnative_", {L".dds"});
+    if (!p.with_ball)
+        for (const char *f : {kBallMaterialsFile, kBallDatablocksFile}) {
+            const fs::path old = dir / widen(f);
+            std::error_code rec;
+            if (!fs::remove(old, rec) && rec) { std::printf("error: cannot remove %s: %s\n", narrow(old.wstring()).c_str(), rec.message().c_str()); return false; }
+        }
     const size_t stale_sounds = p.with_sounds ? remove_stale(sounds, L"", {L".wav"}) : 0;   // the sounds folder is ours
-    const bool had_cache = fs::exists(cache, ec);
-    fs::remove_all(cache, ec);
-    if (ec) { std::printf("error: cannot remove %s: %s\n", narrow(cache.wstring()).c_str(), ec.message().c_str()); return false; }
+    const bool had_cache = !cache.empty() && fs::exists(cache, ec);
+    if (!cache.empty()) {
+        fs::remove_all(cache, ec);
+        if (ec) { std::printf("error: cannot remove %s: %s\n", narrow(cache.wstring()).c_str(), ec.message().c_str()); return false; }
+    }
     std::printf("cleanup: %zu stale file(s) removed from %s", stale, narrow(dir.wstring()).c_str());
     if (p.with_sounds) std::printf(", %zu from %s", stale_sounds, narrow(sounds.wstring()).c_str());
-    std::printf("; cache %s %s\n", narrow(cache.wstring()).c_str(), had_cache ? "removed" : "absent");
+    if (cache.empty()) std::printf("; no BeamNG cache (--out)\n");
+    else std::printf("; cache %s %s\n", narrow(cache.wstring()).c_str(), had_cache ? "removed" : "absent");
     fs::create_directories(p.textures.empty() ? dir : dir / L"tex", ec);
     if (ec) { std::printf("error: cannot create %s: %s\n", narrow(dir.wstring()).c_str(), ec.message().c_str()); return false; }
 
@@ -295,10 +381,26 @@ bool write_package(const fs::path &user, const Package &p, const Options &o, con
     }
     std::vector<std::pair<fs::path, std::string>> texts;
     texts.push_back({dir / widen(dae_file), write_dae(p.rig, info)});
+    {   // BeamNG parses the whole COLLADA text on the first load (then keeps a .cdae): its size is the load-time risk
+        const double bytes = double(texts.back().second.size());
+        size_t animated = 0;
+        for (auto &j : p.rig.joints) animated += j.animated;
+        std::printf("shape size: %.1f MB for %u frames x %zu animated joints (%zu clips)%s\n", bytes / (1024.0 * 1024.0), p.rig.total_frames, animated,
+                    p.rig.clips.size(), bytes > kShapeWarnBytes ? "; warning: above 40 MB, BeamNG's first load of it will be slow" : "");
+    }
     if (info.split == Split::cs) texts.push_back({dir / widen(p.stem + "_" + hash + ".cs"), write_constructor(p.rig, p.ctor, dae_file)});
     texts.push_back({dir / widen(p.materials_file), p.materials_json});
     texts.push_back({dir / widen(p.datablocks_file), "{\n  " + json_escape(p.datablock) + ": {\"name\": " + json_escape(p.datablock) +
                      ", \"class\": \"StaticShapeData\", \"shapeFile\": " + json_escape(vfs(p, dae_file)) + "}\n}\n"});
+    if (p.with_ball) {
+        DaeInfo still;
+        still.tool = info.tool;
+        still.split = Split::bind;   // no joints, no animation: the overlay's shell pose is baked in
+        texts.push_back({dir / widen(ball_file), write_dae(p.ball, still)});
+        texts.push_back({dir / widen(kBallMaterialsFile), p.ball_materials_json});
+        texts.push_back({dir / widen(kBallDatablocksFile), "{\n  " + json_escape(kBallDatablock) + ": {\"name\": " + json_escape(kBallDatablock) +
+                         ", \"class\": \"StaticShapeData\", \"shapeFile\": " + json_escape(vfs(p, ball_file)) + "}\n}\n"});
+    }
     for (auto &t : texts) {
         if (!write_file(t.first.wstring(), t.second)) { std::printf("error: cannot write %s\n", narrow(t.first.wstring()).c_str()); return false; }
         std::printf("wrote %s (%zu bytes)\n", narrow(t.first.wstring()).c_str(), t.second.size());
@@ -356,36 +458,17 @@ std::vector<float> step_phases(const frontiers::Model &model, const frontiers::C
     return out;
 }
 
-// Sonic from the player's install.
-bool prepare_sonic(const Options &o, Package &p, std::string &hash_input)
+// Game materials of one Frontiers model: albedo (sRGB header) + BC5 normal per group of meshes sharing them,
+// named <name_prefix><their common short name>, the short name being the Frontiers material minus prefix.
+// Fills naming (DAE object and material per mesh), json (the .materials.json) and p.textures.
+bool convert_materials(const frontiers::Pac &pac, const frontiers::Model &model, const Options &o, Package &p, const std::string &prefix,
+                       const std::string &name_prefix, std::vector<MeshNaming> &naming, std::string &json)
 {
-    const std::wstring archive = o.frontiers + L"\\" + sonic_data::kArchive;
-    WIN32_FILE_ATTRIBUTE_DATA attr{};
-    if (!GetFileAttributesExW(archive.c_str(), GetFileExInfoStandard, &attr)) { std::printf("error: %s not found\n", narrow(archive).c_str()); return false; }
-    const uint64_t size = uint64_t(attr.nFileSizeHigh) << 32 | attr.nFileSizeLow;
-    const uint64_t mtime = uint64_t(attr.ftLastWriteTime.dwHighDateTime) << 32 | attr.ftLastWriteTime.dwLowDateTime;
-    hash_input += "|sonic|" + std::to_string(size) + "|" + std::to_string(mtime);
-    std::printf("reading %s (%llu bytes)\n", narrow(archive).c_str(), (unsigned long long)size);
-
     std::string error;
-    frontiers::Pac pac;
-    frontiers::Model model;
-    frontiers::Skeleton skeleton;
-    if (!pac.load(archive, error)) { std::printf("error: %s\n", error.c_str()); return false; }
-    if (!frontiers::parse_model(pac, sonic_data::kModelEntry, model, error)) { std::printf("error: model: %s\n", error.c_str()); return false; }
-    const frontiers::PacEntry *skl = pac.find(sonic_data::kSkeletonEntry);
-    if (!skl || !frontiers::parse_skeleton(*skl, skeleton, error)) { std::printf("error: skeleton: %s\n", skl ? error.c_str() : "missing"); return false; }
-    p.model_height = std::max(0.1f, model.max[1] - model.min[1]);
-    std::printf("model: %zu nodes, %zu meshes, %zu vertices, %zu triangles, height %.4f m (y %.4f..%.4f); skeleton %zu bones\n",
-                model.nodes.size(), model.meshes.size(), model.vertices.size(), model.indices.size() / 3, p.model_height,
-                model.min[1], model.max[1], skeleton.bones.size());
-
-    // Materials: albedo + BC5 normal per group, named after the Frontiers mesh materials.
     std::vector<MaterialGroup> groups;
     std::vector<int> group_of(model.meshes.size());
-    std::vector<MeshNaming> naming(model.meshes.size());
+    naming.assign(model.meshes.size(), MeshNaming());
     std::vector<std::string> objects;
-    const std::string prefix = sonic_data::kMaterialPrefix;
     for (size_t m = 0; m < model.meshes.size(); ++m) {
         const std::string &mat = model.meshes[m].material;
         std::string short_name = mat.compare(0, prefix.size(), prefix) == 0 ? mat.substr(prefix.size()) : mat;
@@ -417,14 +500,14 @@ bool prepare_sonic(const Options &o, Package &p, std::string &hash_input)
     }
     std::vector<std::string> used;
     for (auto &g : groups) {
-        std::string name = "sonicnative_" + common_prefix(g.meshes);
-        for (int k = 2; std::find(used.begin(), used.end(), name) != used.end(); ++k) name = "sonicnative_" + common_prefix(g.meshes) + std::to_string(k);
+        std::string name = name_prefix + common_prefix(g.meshes);
+        for (int k = 2; std::find(used.begin(), used.end(), name) != used.end(); ++k) name = name_prefix + common_prefix(g.meshes) + std::to_string(k);
         used.push_back(name);
         g.name = name;
     }
     for (size_t m = 0; m < model.meshes.size(); ++m) naming[m].material = groups[size_t(group_of[m])].name;
 
-    p.materials_json = "{\n";
+    json = "{\n";
     for (size_t k = 0; k < groups.size(); ++k) {
         MaterialGroup &g = groups[k];
         const frontiers::PacEntry *albedo = pac.find(g.albedo + ".dds");
@@ -460,9 +543,85 @@ bool prepare_sonic(const Options &o, Package &p, std::string &hash_input)
             }
         }
         stage += ", \"roughnessFactor\": " + json_num(sonic_data::kRoughness) + ", \"metallicFactor\": " + json_num(sonic_data::kMetallic);
-        p.materials_json += material_json(g.name, stage, g.double_sided) + (k + 1 < groups.size() ? ",\n" : "\n");
+        json += material_json(g.name, stage, g.double_sided) + (k + 1 < groups.size() ? ",\n" : "\n");
     }
-    p.materials_json += "}\n";
+    json += "}\n";
+    return true;
+}
+
+// Frontiers' spin ball shell, optional like the overlay's (beamng/src/assets.cpp, jump ball): a missing or
+// unreadable shell only leaves it out. Its clip's still pose is baked into the vertices, which are centred on
+// the middle of the bind box (the overlay's pivot, beamng/src/game.cpp), so the shape's origin is that middle.
+bool prepare_ball(const frontiers::Pac &pac, const Options &o, Package &p)
+{
+    std::string error;
+    frontiers::Model model;
+    frontiers::Skeleton skeleton;
+    frontiers::Clip clip;
+    const frontiers::PacEntry *skl = pac.find(sonic_data::kBallSkeletonEntry), *anim = pac.find(sonic_data::kBallClipEntry);
+    if (!frontiers::parse_model(pac, sonic_data::kBallModelEntry, model, error) ||
+        !skl || !frontiers::parse_skeleton(*skl, skeleton, error) ||
+        !anim || !frontiers::bake_clip(*anim, skeleton, model, clip, error)) {
+        std::printf("  warning: spin ball left out (%s)\n", (!skl || !anim) && error.empty() ? "skeleton or clip missing" : error.c_str());
+        return false;
+    }
+    float still = 0;   // the overlay samples the clip over time: say how far its keys stray from the first
+    for (uint32_t f = 1; f < clip.frames; ++f) still = std::max(still, max_diff(clip.frame(f), clip.frame(0), int(clip.nodes * 12)));
+    const float centre[3] = {(model.min[0] + model.max[0]) * 0.5f, (model.min[1] + model.max[1]) * 0.5f, (model.min[2] + model.max[2]) * 0.5f};
+    if (!pose_vertices(model, clip, 0, centre, error)) { std::printf("  warning: spin ball left out (%s)\n", error.c_str()); return false; }
+    float radius = 0;
+    for (auto &v : model.vertices) radius = std::max(radius, std::sqrt(v.pos[0] * v.pos[0] + v.pos[1] * v.pos[1] + v.pos[2] * v.pos[2]));
+    std::printf("spin ball: %s, %zu nodes, %zu meshes, %zu vertices, %zu triangles; pose = key 0 of %s (%u keys, max drift %.3g), "
+                "centred on (%.4f, %.4f, %.4f), radius %.4f\n", sonic_data::kBallModelEntry, model.nodes.size(), model.meshes.size(), model.vertices.size(),
+                model.indices.size() / 3, sonic_data::kBallClipEntry, clip.frames, still, centre[0], centre[1], centre[2], radius);
+    const size_t textures = p.textures.size();
+    std::vector<MeshNaming> naming;
+    Rig rig;
+    if (!convert_materials(pac, model, o, p, sonic_data::kBallMaterialPrefix, "sonicnative_ball_", naming, p.ball_materials_json) ||
+        !build_rigid(model, naming, rig, error)) {
+        if (!error.empty()) std::printf("  warning: %s\n", error.c_str());
+        std::printf("  warning: spin ball left out\n");
+        p.textures.resize(textures);
+        p.ball_materials_json.clear();
+        return false;
+    }
+    for (auto &m : rig.meshes)
+        std::printf("  mesh %-10s -> %-24s %6zu vertices %6zu triangles (rigid); winding %zu agree / %zu opposite / %zu degenerate%s\n",
+                    (m.object + "2").c_str(), m.material.c_str(), m.positions.size() / 3, m.triangles.size() / 3, m.agreeing, m.flipped, m.degenerate,
+                    m.reversed ? " -> reversed" : "");
+    p.ball = std::move(rig);
+    p.ball_radius = radius;
+    p.with_ball = true;
+    return true;
+}
+
+// Sonic from the player's install.
+bool prepare_sonic(const Options &o, Package &p, std::string &hash_input)
+{
+    const std::wstring archive = o.frontiers + L"\\" + sonic_data::kArchive;
+    WIN32_FILE_ATTRIBUTE_DATA attr{};
+    if (!GetFileAttributesExW(archive.c_str(), GetFileExInfoStandard, &attr)) { std::printf("error: %s not found\n", narrow(archive).c_str()); return false; }
+    const uint64_t size = uint64_t(attr.nFileSizeHigh) << 32 | attr.nFileSizeLow;
+    const uint64_t mtime = uint64_t(attr.ftLastWriteTime.dwHighDateTime) << 32 | attr.ftLastWriteTime.dwLowDateTime;
+    hash_input += "|sonic|" + std::to_string(size) + "|" + std::to_string(mtime);
+    std::printf("reading %s (%llu bytes)\n", narrow(archive).c_str(), (unsigned long long)size);
+
+    std::string error;
+    frontiers::Pac pac;
+    frontiers::Model model;
+    frontiers::Skeleton skeleton;
+    if (!pac.load(archive, error)) { std::printf("error: %s\n", error.c_str()); return false; }
+    if (!frontiers::parse_model(pac, sonic_data::kModelEntry, model, error)) { std::printf("error: model: %s\n", error.c_str()); return false; }
+    const frontiers::PacEntry *skl = pac.find(sonic_data::kSkeletonEntry);
+    if (!skl || !frontiers::parse_skeleton(*skl, skeleton, error)) { std::printf("error: skeleton: %s\n", skl ? error.c_str() : "missing"); return false; }
+    p.model_height = std::max(0.1f, model.max[1] - model.min[1]);
+    std::printf("model: %zu nodes, %zu meshes, %zu vertices, %zu triangles, height %.4f m (y %.4f..%.4f); skeleton %zu bones\n",
+                model.nodes.size(), model.meshes.size(), model.vertices.size(), model.indices.size() / 3, p.model_height,
+                model.min[1], model.max[1], skeleton.bones.size());
+
+    std::vector<MeshNaming> naming;
+    if (!convert_materials(pac, model, o, p, sonic_data::kMaterialPrefix, "sonicnative_", naming, p.materials_json)) return false;
+    if (o.ball) prepare_ball(pac, o, p);
 
     if (!build_bind(model, naming, o.flat, p.rig, error)) { std::printf("error: %s\n", error.c_str()); return false; }
     if (o.bind_only) return true;
@@ -474,9 +633,10 @@ bool prepare_sonic(const Options &o, Package &p, std::string &hash_input)
         for (auto &c : clips) if (c.name == id) { std::printf("error: clip '%s' listed twice\n", id.c_str()); return false; }
         ClipSource c;
         c.name = row->id; c.loop = row->loop; c.ref_kmh = row->ref_kmh; c.min_rate = row->min_rate; c.max_rate = row->max_rate;
+        c.blend_seconds = row->blend_seconds;
         const frontiers::PacEntry *entry = pac.find(row->clip);
         if (!entry || !frontiers::bake_clip(*entry, skeleton, model, c.clip, error)) { std::printf("error: clip %s: %s\n", row->clip, entry ? error.c_str() : "missing"); return false; }
-        std::printf("  clip %-10s %-34s %3u frames @ %.0f fps (%.3f s)\n", c.name.c_str(), row->clip, c.clip.frames, c.clip.rate, c.clip.duration);
+        std::printf("  clip %-11s %-34s %3u frames @ %.0f fps (%.3f s)\n", c.name.c_str(), row->clip, c.clip.frames, c.clip.rate, c.clip.duration);
         for (const char *s : sonic_data::kStepClips) {
             if (c.name != s || !c.loop) continue;
             c.steps = step_phases(model, c.clip);
@@ -533,25 +693,40 @@ int wmain(int argc, wchar_t **argv)
         else if (a == L"--no-srgb") o.srgb = false;
         else if (a == L"--no-uv-clamp") o.uv_clamp = false;
         else if (a == L"--no-sounds") o.sounds = false;
+        else if (a == L"--no-ball") o.ball = false;
+        else if (a == L"--out" && more) o.out = trim_folder(argv[++i]);
         else if (a == L"--help" || a == L"-h" || a == L"/?") { usage(); return 0; }
         else { std::printf("error: unknown argument '%s'\n", narrow(a).c_str()); usage(); return 2; }
     }
     std::printf("sonicnative_convert %s\n", kVersion);
-    if (o.userpath.empty()) { usage(); return 2; }
+    if (o.userpath.empty() && o.out.empty()) { usage(); return 2; }
     {   // one spelling of the clip list for the lookup and the hash
         std::string list;
         for (auto &id : clip_ids(o.clips)) list += (list.empty() ? "" : ",") + id;
         o.clips = list;
     }
-    if (beamng_running()) {
-        std::printf("BeamNG.drive.x64.exe is running: close the game before converting (it keeps the shape and its cache open).\n");
-        return 3;
-    }
-    const fs::path user(o.userpath);
+    // Where the package goes: the user folder (BeamNG closed: it keeps the shape and its cache open), or --out.
+    fs::path data, cache;
     std::error_code ec;
-    if (!fs::is_directory(user / L"current", ec)) {
-        std::printf("error: %s has no 'current' folder: not a BeamNG user folder (run the game once with it)\n", narrow(o.userpath).c_str());
-        return 2;
+    if (o.out.empty()) {
+        if (beamng_running()) {
+            std::printf("BeamNG.drive.x64.exe is running: close the game before converting (it keeps the shape and its cache open).\n");
+            return 3;
+        }
+        const fs::path user(o.userpath);
+        if (!fs::is_directory(user / L"current", ec)) {
+            std::printf("error: %s has no 'current' folder: not a BeamNG user folder (run the game once with it)\n", narrow(o.userpath).c_str());
+            return 2;
+        }
+        data = user / L"current" / L"mods" / widen(kDataFolder);
+        cache = user / L"current" / L"temp" / L"mods" / widen(kDataFolder);
+    } else {
+        const std::string refusal = out_refusal(o.out);
+        if (!refusal.empty()) { std::printf("error: --out %s: %s\n", narrow(o.out).c_str(), refusal.c_str()); return 2; }
+        data = fs::path(o.out);
+        fs::create_directories(data, ec);
+        if (ec) { std::printf("error: cannot create %s: %s\n", narrow(o.out).c_str(), ec.message().c_str()); return 2; }
+        std::printf("--out: writing into %s (not a BeamNG user folder)\n", narrow(o.out).c_str());
     }
 
     Package p;
@@ -582,7 +757,8 @@ int wmain(int argc, wchar_t **argv)
     const std::string hash = hex8(fnv1a(hash_input));
     p.ctor = "sonicnative_" + p.stem + "_" + hash + "Dae";
     print_rig(p.rig);
-    if (!write_package(user, p, o, hash)) return 1;
-    std::printf("done: %s, split %s, hash %s\n", p.folder.c_str(), split_name(o.bind_only ? Split::bind : o.split), hash.c_str());
+    if (!write_package(data, cache, p, o, hash)) return 1;
+    std::printf("done: %s, split %s, hash %s%s\n", p.folder.c_str(), split_name(o.bind_only ? Split::bind : o.split), hash.c_str(),
+                o.fixture ? "" : p.with_ball ? ", spin ball" : ", no spin ball");
     return 0;
 }

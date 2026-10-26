@@ -5,9 +5,9 @@
 -- sonicnative_sfx attaches them to Sonic, or leaves the sonic boom where it started. The sounds are
 -- the player's own Frontiers ones, converted into mods/sonicnative_data/sounds and listed in
 -- manifest.json ("sounds"). It reads sonicnative_body (state, velocity, car hits) and
--- sonicnative_main (the clip and its phase, for the footsteps).
--- Not played for now: drift and trick (the native mode has no drift or trick state yet) and the
--- rings (not in the native mode). sonicnative_sound.test(id) still plays any of them.
+-- sonicnative_main (the clip and its phase, for the footsteps; the state its state machine is in,
+-- for the boost, drift and trick cues).
+-- Not played: the rings (not in the native mode). sonicnative_sound.test(id) still plays any sound.
 
 local M = {}
 local logTag = 'sonicnative'
@@ -49,6 +49,8 @@ local speedKmh, air, groundLost, airTime = 0, false, 0, 0
 local lastJumps, lastHit, wanted = nil, nil, false
 local boostCand, boostCandSince, inBoost, boostLoop = false, 0, false, 0
 local boostAt, boostEndAt = 0, 0  -- clock when the boost state last started and ended
+local lastStateCount, lastAirTricks = nil, nil   -- sonicnative_main's counters, as last read
+local inDrift, driftLoop, driftAt, driftEndAt = false, 0, 0, 0
 local wind = 0
 local stepClip, stepPhase = nil, 0
 local stepsHeldUntil = 0          -- clock until which a landing keeps the footsteps quiet
@@ -310,7 +312,18 @@ local function forget()
   lastJumps, lastHit, wanted = nil, nil, false
   boostCand, boostCandSince, inBoost, boostLoop = false, 0, false, 0
   boostAt, boostEndAt = 0, 0
+  lastStateCount, lastAirTricks = nil, nil
+  inDrift, driftLoop, driftAt, driftEndAt = false, 0, 0, 0
   wind, stepClip, stepPhase, stepsHeldUntil = 0, nil, 0, 0
+end
+
+-- sonicnative_main's animation (the same table every call), or nil
+local function mainAnim()
+  local main = loaded('sonicnative_main')
+  if main and type(main.getAnim) == 'function' then
+    local ok, a = pcall(main.getAnim)
+    if ok and type(a) == 'table' then return a end
+  end
 end
 
 -- sound comes back: counters and edges as they are now, so nothing old plays (the clip's phase
@@ -320,6 +333,9 @@ local function resync(st, body)
   lastHit = body.getLastHit and body.getLastHit() or nil
   wanted = st.wantsMove == true
   stepClip = nil
+  local a = mainAnim()
+  lastStateCount = a and tonumber(a.stateCount) or nil
+  lastAirTricks = a and tonumber(a.airTricks) or nil
 end
 
 local function gamePaused()
@@ -388,15 +404,16 @@ local function rules(dt, st, body)
     stepsHeldUntil = clock + R.landHold
   end
 
-  -- the boost state: boost held on the ground from boostMinKmh (states.json). A change to or from
-  -- the air is at once, any other must be wanted for stateHold (game.cpp:259-265)
+  -- boosting: boost held on the ground from boostMinKmh (states.json boost, which drifting needs
+  -- too). A change to or from the air is at once, any other must be wanted for stateHold
+  -- (game.cpp:259-265). It drives the boost's looping layers and the sonic boom; the boost cue
+  -- itself plays when sonicnative_main's state machine starts the boost state (below)
   local cand = st.boosting == true and not air and speedKmh >= R.boostMinKmh
   if cand ~= boostCand then boostCand, boostCandSince = cand, clock end
   if cand ~= inBoost and (air or wasAir or clock - boostCandSince >= R.stateHold) then
     inBoost = cand
     if inBoost then
       boostAt = clock
-      playId('boost', 1)
       pickLoop('boost')
       pickLoop('boost_loop')
       -- a sonic boom on a fast boost (game.cpp:302, Lab setting)
@@ -411,6 +428,40 @@ local function rules(dt, st, body)
   local ran = (inBoost and clock or boostEndAt) - boostAt
   loopLayers('boost', boostLoop, ran)
   loopLayers('boost_loop', boostLoop, ran)
+
+  -- boost, drift and trick: when sonicnative_main's state machine starts a state whose enterSound
+  -- they are (states.json; game.cpp:263), and a trick for each trick held in the air (game.cpp:328).
+  -- So, as the overlay, going straight into a drift plays only the drift cue, and boosting again
+  -- after a drift plays the boost cue again (its looping layers keep going from the boost's start).
+  -- Each switch between drift left and right plays the drift cue again; its looped layers
+  -- (drift_loop) loop from their place in the cue while he drifts and fade out after, as the boost's
+  local a = mainAnim()
+  local stateId = a and a.state or nil
+  local count, tricks = a and tonumber(a.stateCount) or nil, a and tonumber(a.airTricks) or nil
+  local drifting = stateId == 'drift_left' or stateId == 'drift_right'
+  if count and lastStateCount and count ~= lastStateCount then
+    if a.enterSound == 'drift' then
+      playId('drift', 1)
+      if not inDrift then
+        driftAt = clock
+        pickLoop('drift')
+        pickLoop('drift_loop')
+      end
+    elseif a.enterSound == 'trick' then
+      playId('trick', 1)
+    elseif a.enterSound == 'boost' then
+      playId('boost', 1)
+    end
+  end
+  lastStateCount = count
+  if tricks and lastAirTricks and tricks > lastAirTricks then playId('trick', 1) end
+  lastAirTricks = tricks
+  if inDrift and not drifting then driftEndAt = clock end
+  inDrift = drifting
+  driftLoop = inDrift and 1 or math.max(0, driftLoop - dt / math.max(0.01, R.driftLoopFadeOut))
+  local driftRan = (inDrift and clock or driftEndAt) - driftAt
+  loopLayers('drift', driftLoop, driftRan)
+  loopLayers('drift_loop', driftLoop, driftRan)
 
   -- brake: the stick released on the ground faster than brakeAboveKmh (game.cpp:504-506)
   local wants = st.wantsMove == true
@@ -427,14 +478,12 @@ local function rules(dt, st, body)
   end
 
   -- footsteps: the walk or run clip's phase crosses a toe-down phase, on the ground, not swimming
-  -- nor on a wall nor just after a landing (game.cpp:487-503); the run clip plays walk steps when
-  -- slow (sounds.lua)
-  local main = loaded('sonicnative_main')
-  local a = main and main.getAnim and main.getAnim() or nil
+  -- nor on a wall nor just after a landing (game.cpp:487-503); never in the fast state (it plays the
+  -- boost clip) nor any other clip; the run clip plays walk steps when slow (sounds.lua)
   local clipName = a and a.clip or nil
   local steps = a and a.steps or nil
   local stepping = not air and water ~= 2 and not st.onWall and (clipName == 'walk' or clipName == 'run')
-    and type(steps) == 'table' and #steps > 0 and clock >= stepsHeldUntil
+    and stateId ~= 'fast' and type(steps) == 'table' and #steps > 0 and clock >= stepsHeldUntil
   if stepping then
     local phase = tonumber(a.phase) or 0
     if stepClip == clipName then
@@ -545,7 +594,7 @@ M.status = function()
   return {
     sounds = soundCount, ids = ids, missingFiles = missingFiles, sfxFile = sfxOk, windFile = windFile,
     muted = muted and mutedReason or false, events = events, loops = loopInfo, pending = #pending, clock = clock,
-    speedKmh = speedKmh, air = air, surface = surface, inBoost = inBoost, wind = wind,
+    speedKmh = speedKmh, air = air, surface = surface, inBoost = inBoost, inDrift = inDrift, wind = wind,
     sliderGain = sliderGain, settings = settings, body = bodyId, lastError = lastError,
   }
 end

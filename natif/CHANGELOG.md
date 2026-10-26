@@ -5,6 +5,14 @@ Le mode natif (dossier `natif/`) a ses propres versions : le numéro est dans `n
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## natif-v0.3.0
+- Toutes les animations du mode superposé : marche, course, boost avec inclinaison à gauche et à droite, **drift** à gauche et à droite (boost tenu au-dessus de 60 km/h en tournant fort), départ de saut, **boule de saut**, **figures en l'air** (après 0,8 s en l'air sans saut), atterrissage (0,45 s), course sur les murs (montée, gauche, droite) et **nage**. Elles sont choisies par la même logique que le superposé (priorités, délais, inclinaison de 16° dans les virages), portée en Lua avec ses nombres dans `lua/common/sonicnative/anim.lua`.
+- La boule de saut est la vraie coque de Frontiers : un second modèle qui tourne autour de Sonic pendant le saut, Sonic étant caché une fois la boule formée, comme dans le superposé.
+- Le convertisseur exporte les 19 animations et la coque de la boule (`--no-ball` pour s'en passer, `--out <dossier>` pour écrire ailleurs et inspecter). Le modèle passe de 10 à 18 Mo.
+- Sons de drift (au début de chaque drift, à chaque changement de côté) et de figure ; pas de bruits de pas pendant le boost, le drift et l'état « rapide », comme dans le superposé.
+- Testé dans BeamNG (Gridmap V2) : drift, boule de saut puis atterrissage, figures pendant une chute, nage dans le bassin de la carte (Sonic à moitié dans l'eau, l'eau de BeamNG cache le bas du corps).
+- À savoir : sans fondu entre deux animations (BeamNG n'en propose pas pour cet objet), le passage d'une animation à l'autre est net. La course sur les murs démarre mais s'arrête au bout de 0,03 s : c'est la physique du mur, à corriger à part.
+
 ## natif-v0.2.1
 - Saut à grande vitesse corrigé : plus Sonic allait vite, plus son saut s'écrasait (environ 3,2 m à l'arrêt, 1,9 m à 300 km/h, 0,8 m à 560 km/h, au point qu'on n'entendait que le son du saut). La poussée du saut vise maintenant la vitesse de saut réelle quoi que le sol en prenne, et pendant tout le saut sa hauteur suit l'arc d'un saut à l'arrêt : ce que BeamNG retire au corps de marche rapide lui est rendu. Mesuré sur Gridmap V2, en boost, terrain plat : 3,4 m à l'arrêt, 3,1 m à 300 km/h, 2,7 m à 560 km/h, environ 1,2 s en l'air.
 - Le mode superposé (en pause) a la même physique, donc le même défaut ; il n'est pas corrigé.

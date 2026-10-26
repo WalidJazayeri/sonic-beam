@@ -17,21 +17,48 @@ constexpr const char *kMaterialPrefix = "chr_sonic_";
 // mesh (beamng/src/assets.cpp sonic_height, beamng/src/game.cpp k); 1.0 / 1.082 = 0.924 for LOD0.
 constexpr float kHeightMeters = 1.0f;
 
-// beamng/sheets/animations.json (id, clip, loop, refKmh, minRate, maxRate). 'fall' is what the overlay
-// plays airborne (beamng/sheets/states.json row airborne); jump_start, land and ball are the jump set.
-struct ClipRow { const char *id, *clip; bool loop; float ref_kmh, min_rate, max_rate; };
+// beamng/sheets/animations.json, every row in its order (id, clip, loop, refKmh, minRate, maxRate, blendSeconds).
+// A 'fixed' rate row has refKmh 0 and both rates 1. 'swim' reuses walk_loop like the overlay but is a sequence
+// of its own (fixed rate, slower blend). 'fall' is what the overlay plays airborne (states.json row airborne);
+// jump_start, ball and land are the jump set; trick_* the air tricks; wall_* the wall run (game.cpp f->wall).
+struct ClipRow { const char *id, *clip; bool loop; float ref_kmh, min_rate, max_rate, blend_seconds; };
 constexpr ClipRow kClips[] = {
-    {"idle",       "chr_sonic@idle_loop.anm.pxd", true,  0,  1.0f, 1.0f},
-    {"walk",       "chr_sonic@walk_loop.anm.pxd", true,  6,  0.7f, 2.0f},
-    {"run",        "chr_sonic@run_loop.anm.pxd",  true,  32, 0.9f, 3.2f},
-    {"boost",      "chr_sonic@boost_loop.anm.pxd", true, 60, 1.0f, 4.5f},
-    {"fall",       "chr_sonic@jump_d_loop.anm.pxd", true, 0, 1.0f, 1.0f},
-    {"jump_start", "chr_sonic@jump_s.anm.pxd",    false, 0,  1.0f, 1.0f},
-    {"land",       "chr_sonic@jump_e.anm.pxd",    false, 0,  1.0f, 1.0f},
-    {"ball",       "chr_sonic@ball_loop.anm.pxd", true,  0,  1.0f, 1.0f},
+    {"idle",        "chr_sonic@idle_loop.anm.pxd",      true,  0,  1.0f, 1.0f, 0.25f},
+    {"walk",        "chr_sonic@walk_loop.anm.pxd",      true,  6,  0.7f, 2.0f, 0.2f},
+    {"run",         "chr_sonic@run_loop.anm.pxd",       true,  32, 0.9f, 3.2f, 0.2f},
+    {"boost",       "chr_sonic@boost_loop.anm.pxd",     true,  60, 1.0f, 4.5f, 0.15f},
+    {"boost_left",  "chr_sonic@boost_l_loop.anm.pxd",   true,  60, 1.0f, 4.5f, 0.2f},
+    {"boost_right", "chr_sonic@boost_r_loop.anm.pxd",   true,  60, 1.0f, 4.5f, 0.2f},
+    {"drift_left",  "chr_sonic@drift_l_loop.anm.pxd",   true,  0,  1.0f, 1.0f, 0.15f},
+    {"drift_right", "chr_sonic@drift_r_loop.anm.pxd",   true,  0,  1.0f, 1.0f, 0.15f},
+    {"fall",        "chr_sonic@jump_d_loop.anm.pxd",    true,  0,  1.0f, 1.0f, 0.15f},
+    {"trick_up",    "chr_sonic@trick_u0.anm.pxd",       false, 0,  1.0f, 1.0f, 0.1f},
+    {"trick_left",  "chr_sonic@trick_l0.anm.pxd",       false, 0,  1.0f, 1.0f, 0.1f},
+    {"trick_right", "chr_sonic@trick_r0.anm.pxd",       false, 0,  1.0f, 1.0f, 0.1f},
+    {"land",        "chr_sonic@jump_e.anm.pxd",         false, 0,  1.0f, 1.0f, 0.08f},
+    {"jump_start",  "chr_sonic@jump_s.anm.pxd",         false, 0,  1.0f, 1.0f, 0.06f},
+    {"ball",        "chr_sonic@ball_loop.anm.pxd",      true,  0,  1.0f, 1.0f, 0.08f},
+    {"swim",        "chr_sonic@walk_loop.anm.pxd",      true,  0,  1.0f, 1.0f, 0.25f},
+    {"wall_up",     "chr_sonic@wallrun_u_loop.anm.pxd", true,  32, 0.9f, 3.2f, 0.12f},
+    {"wall_left",   "chr_sonic@wallrun_l_loop.anm.pxd", true,  32, 0.9f, 3.2f, 0.12f},
+    {"wall_right",  "chr_sonic@wallrun_r_loop.anm.pxd", true,  32, 0.9f, 3.2f, 0.12f},
 };
-// The overlay's ground and air set (states.json idle/walk/run/boost/airborne).
-constexpr const char *kDefaultClips = "idle,walk,run,boost,fall";
+// Every animation the overlay plays (all of animations.json).
+constexpr const char *kDefaultClips = "idle,walk,run,boost,boost_left,boost_right,drift_left,drift_right,fall,"
+                                      "trick_up,trick_left,trick_right,land,jump_start,ball,swim,wall_up,wall_left,wall_right";
+
+// beamng/sheets/assets.json rows ball_model, ball_skeleton and ball_clip: Frontiers' spin ball shell, drawn
+// around Sonic curled up in the jump ball (beamng/src/game.cpp, jump ball). The overlay poses it with its clip
+// (a still pose: 2 identical keys turning the shell 90 degrees about its middle), centres it on the middle of
+// its bind box, scales it like Sonic and turns the whole shell about Sonic's right axis.
+constexpr const char *kBallModelEntry = "chr_sonicspin.model";
+constexpr const char *kBallSkeletonEntry = "chr_sonicspin.skl.pxd";
+constexpr const char *kBallClipEntry = "chr_sonicspin@spin_normal_loop.anm.pxd";
+constexpr const char *kBallMaterialPrefix = "chr_sonicspin_";
+// The shell's middle sits this high above Sonic's feet: tuning.json sonicHeightMeters * 0.42 (game.cpp pivot).
+constexpr float kBallPivotShare = 0.42f;
+// Ball turns per second: the Lab's default (beamng/mod/lua/ge/extensions/sonicfrontiers/sonic.lua ballSpin = 3).
+constexpr float kBallTurnsPerSecond = 3.0f;
 
 // Footsteps: the overlay steps on the walk and run animations only (beamng/src/game.cpp footsteps), when a
 // toe comes down through the bottom fifth of its height range (beamng/src/assets.cpp footsteps).

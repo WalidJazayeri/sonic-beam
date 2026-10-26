@@ -64,7 +64,7 @@ struct RigClip {
     std::string name;
     uint32_t first = 0, frames = 0;   // range on the concatenated timeline
     bool loop = false;
-    float ref_kmh = 0, min_rate = 1, max_rate = 1;
+    float ref_kmh = 0, min_rate = 1, max_rate = 1, blend_seconds = 0;
     std::vector<float> steps;         // toe-down phases in 0..1 of the cycle (walk, run), ascending
     // Diagnostics
     uint32_t source_frames = 0;
@@ -87,7 +87,7 @@ struct Rig {
 struct ClipSource {
     std::string name;
     bool loop = false;
-    float ref_kmh = 0, min_rate = 1, max_rate = 1;
+    float ref_kmh = 0, min_rate = 1, max_rate = 1, blend_seconds = 0;
     std::vector<float> steps;
     frontiers::Clip clip;
 };
@@ -112,6 +112,117 @@ inline bool reserved_name(const std::string &name)
     for (char c : name) lower += char(std::tolower(static_cast<unsigned char>(c)));
     for (const char *p : prefixes) if (lower.compare(0, std::strlen(p), p) == 0) return true;
     return false;
+}
+
+// One Frontiers mesh in BeamNG object space: positions, normals, UVs (clamped for a clamp-addressed texture)
+// and CCW triangles. skinned: also its joint palette and influences; a rigid mesh keeps joints empty and the
+// DAE writes it as plain geometry.
+inline bool build_mesh(const frontiers::Model &model, size_t m, const MeshNaming &naming, bool skinned, RigMesh &out, std::string &error)
+{
+    const size_t n = model.nodes.size();
+    const frontiers::Mesh &src = model.meshes[m];
+    const uint32_t first = src.base_vertex;
+    const uint32_t end = m + 1 < model.meshes.size() ? model.meshes[m + 1].base_vertex : uint32_t(model.vertices.size());
+    if (end <= first || end - first > 65535) { error = "mesh " + src.material + " has a bad vertex range"; return false; }
+    out.object = naming.object;
+    out.material = naming.material;
+    out.clamp_u = naming.clamp_u;
+    out.clamp_v = naming.clamp_v;
+    const uint32_t count = end - first;
+    std::map<int, int> slot;
+    if (skinned) {
+        for (uint32_t v = 0; v < count; ++v) {
+            const frontiers::Vertex &vx = model.vertices[first + v];
+            for (int k = 0; k < 4; ++k) if (vx.weights[k]) slot[vx.joints[k]] = 0;
+        }
+        for (auto &s : slot) { s.second = int(out.joints.size()); out.joints.push_back(s.first); }
+    }
+    for (uint32_t v = 0; v < count; ++v) {
+        const frontiers::Vertex &vx = model.vertices[first + v];
+        const float p[3] = {-vx.pos[0], vx.pos[2], vx.pos[1]};
+        float nr[3] = {-vx.normal[0], vx.normal[2], vx.normal[1]};
+        const float len = std::sqrt(nr[0] * nr[0] + nr[1] * nr[1] + nr[2] * nr[2]);
+        if (len > 1e-6f) for (float &c : nr) c /= len; else { nr[0] = nr[1] = 0; nr[2] = 1; }
+        for (int a = 0; a < 3; ++a) { out.positions.push_back(quantize(p[a])); out.normals.push_back(quantize(nr[a])); }
+        // BeamNG materials sample with wrap: a clamp-addressed texture gets its UVs clamped instead
+        // (exact for triangles on one side of an edge, close for the few that straddle it).
+        float uv[2] = {vx.uv[0], vx.uv[1]};
+        if (out.clamp_u) uv[0] = std::clamp(uv[0], 0.0f, 1.0f);
+        if (out.clamp_v) uv[1] = std::clamp(uv[1], 0.0f, 1.0f);
+        if (uv[0] != vx.uv[0] || uv[1] != vx.uv[1]) ++out.uv_clamped;
+        out.uvs.push_back(quantize(uv[0]));
+        out.uvs.push_back(quantize(1.0f - uv[1]));
+        if (!skinned) continue;
+        uint8_t c = 0;
+        for (int k = 0; k < 4; ++k) {
+            if (!vx.weights[k]) continue;
+            if (vx.joints[k] >= n) { error = "skin joint out of range in " + src.material; return false; }
+            out.influences.push_back(uint16_t(slot[vx.joints[k]]));
+            out.influences.push_back(vx.weights[k]);
+            ++c;
+        }
+        if (!c) { error = "vertex without weights in " + src.material; return false; }
+        out.vcount.push_back(c);
+    }
+    // Winding: COLLADA wants CCW around the outward normal. Compare each face's geometric normal
+    // with its vertex normals (the axis change has det +1, so Frontiers space gives the same answer).
+    if (src.index_count % 3 || src.first_index + src.index_count > model.indices.size()) { error = "mesh " + src.material + " index range"; return false; }
+    const uint16_t *idx = model.indices.data() + src.first_index;
+    for (uint32_t t = 0; t + 2 < src.index_count; t += 3) {
+        const frontiers::Vertex &a = model.vertices[first + idx[t]], &b = model.vertices[first + idx[t + 1]], &c = model.vertices[first + idx[t + 2]];
+        const float e1[3] = {b.pos[0] - a.pos[0], b.pos[1] - a.pos[1], b.pos[2] - a.pos[2]};
+        const float e2[3] = {c.pos[0] - a.pos[0], c.pos[1] - a.pos[1], c.pos[2] - a.pos[2]};
+        const float g[3] = {e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]};
+        const float d = g[0] * (a.normal[0] + b.normal[0] + c.normal[0]) + g[1] * (a.normal[1] + b.normal[1] + c.normal[1]) +
+                        g[2] * (a.normal[2] + b.normal[2] + c.normal[2]);
+        if (std::fabs(d) < 1e-14f) ++out.degenerate; else if (d > 0) ++out.agreeing; else ++out.flipped;
+    }
+    out.reversed = out.flipped > out.agreeing;
+    for (uint32_t t = 0; t + 2 < src.index_count; t += 3) {
+        out.triangles.push_back(idx[t]);
+        out.triangles.push_back(idx[out.reversed ? t + 2 : t + 1]);
+        out.triangles.push_back(idx[out.reversed ? t + 1 : t + 2]);
+    }
+    return true;
+}
+
+// A still shape (the spin ball shell): every mesh rigid, no joints, no animation.
+inline bool build_rigid(const frontiers::Model &model, const std::vector<MeshNaming> &naming, Rig &rig, std::string &error)
+{
+    if (naming.size() != model.meshes.size()) { error = "mesh naming does not match the model"; return false; }
+    for (size_t m = 0; m < model.meshes.size(); ++m) {
+        RigMesh out;
+        if (!build_mesh(model, m, naming[m], false, out, error)) return false;
+        rig.meshes.push_back(std::move(out));
+    }
+    return true;
+}
+
+// Bakes frame `frame` of a clip into the model's vertices (linear blend skinning in Frontiers space) and
+// moves them by -centre, so a rigid copy shows that pose with its origin on `centre`. Normals turn with the
+// joints' 3x3 and are renormalised (exact for the rotations and uniform scales of a still pose).
+inline bool pose_vertices(frontiers::Model &model, const frontiers::Clip &clip, uint32_t frame, const float centre[3], std::string &error)
+{
+    if (clip.nodes != model.nodes.size() || frame >= clip.frames) { error = "pose clip does not match the model"; return false; }
+    const float *skin = clip.frame(frame);
+    for (auto &vx : model.vertices) {
+        float p[3] = {0, 0, 0}, nr[3] = {0, 0, 0};
+        for (int k = 0; k < 4; ++k) {
+            if (!vx.weights[k]) continue;
+            if (vx.joints[k] >= clip.nodes) { error = "pose joint out of range"; return false; }
+            const float w = vx.weights[k] / 255.0f, *s = skin + size_t(vx.joints[k]) * 12;
+            for (int r = 0; r < 3; ++r) {
+                p[r] += w * (s[r * 4] * vx.pos[0] + s[r * 4 + 1] * vx.pos[1] + s[r * 4 + 2] * vx.pos[2] + s[r * 4 + 3]);
+                nr[r] += w * (s[r * 4] * vx.normal[0] + s[r * 4 + 1] * vx.normal[1] + s[r * 4 + 2] * vx.normal[2]);
+            }
+        }
+        const float len = std::sqrt(nr[0] * nr[0] + nr[1] * nr[1] + nr[2] * nr[2]);
+        for (int a = 0; a < 3; ++a) {
+            vx.pos[a] = p[a] - centre[a];
+            if (len > 1e-6f) vx.normal[a] = nr[a] / len;
+        }
+    }
+    return true;
 }
 
 // Joint tree, bind matrices and per-mesh geometry (shared by the real model and the fixture).
@@ -160,67 +271,8 @@ inline bool build_bind(const frontiers::Model &model, const std::vector<MeshNami
     if (rig.bind_check > kSelfCheckLimit) { char b[96]; std::snprintf(b, sizeof(b), "bind self-check failed (%.3g)", rig.bind_check); error = b; return false; }
 
     for (size_t m = 0; m < model.meshes.size(); ++m) {
-        const frontiers::Mesh &src = model.meshes[m];
-        const uint32_t first = src.base_vertex;
-        const uint32_t end = m + 1 < model.meshes.size() ? model.meshes[m + 1].base_vertex : uint32_t(model.vertices.size());
-        if (end <= first || end - first > 65535) { error = "mesh " + src.material + " has a bad vertex range"; return false; }
         RigMesh out;
-        out.object = naming[m].object;
-        out.material = naming[m].material;
-        out.clamp_u = naming[m].clamp_u;
-        out.clamp_v = naming[m].clamp_v;
-        const uint32_t count = end - first;
-        std::map<int, int> slot;
-        for (uint32_t v = 0; v < count; ++v) {
-            const frontiers::Vertex &vx = model.vertices[first + v];
-            for (int k = 0; k < 4; ++k) if (vx.weights[k]) slot[vx.joints[k]] = 0;
-        }
-        for (auto &s : slot) { s.second = int(out.joints.size()); out.joints.push_back(s.first); }
-        for (uint32_t v = 0; v < count; ++v) {
-            const frontiers::Vertex &vx = model.vertices[first + v];
-            const float p[3] = {-vx.pos[0], vx.pos[2], vx.pos[1]};
-            float nr[3] = {-vx.normal[0], vx.normal[2], vx.normal[1]};
-            const float len = std::sqrt(nr[0] * nr[0] + nr[1] * nr[1] + nr[2] * nr[2]);
-            if (len > 1e-6f) for (float &c : nr) c /= len; else { nr[0] = nr[1] = 0; nr[2] = 1; }
-            for (int a = 0; a < 3; ++a) { out.positions.push_back(quantize(p[a])); out.normals.push_back(quantize(nr[a])); }
-            // BeamNG materials sample with wrap: a clamp-addressed texture gets its UVs clamped instead
-            // (exact for triangles on one side of an edge, close for the few that straddle it).
-            float uv[2] = {vx.uv[0], vx.uv[1]};
-            if (out.clamp_u) uv[0] = std::clamp(uv[0], 0.0f, 1.0f);
-            if (out.clamp_v) uv[1] = std::clamp(uv[1], 0.0f, 1.0f);
-            if (uv[0] != vx.uv[0] || uv[1] != vx.uv[1]) ++out.uv_clamped;
-            out.uvs.push_back(quantize(uv[0]));
-            out.uvs.push_back(quantize(1.0f - uv[1]));
-            uint8_t c = 0;
-            for (int k = 0; k < 4; ++k) {
-                if (!vx.weights[k]) continue;
-                if (vx.joints[k] >= n) { error = "skin joint out of range in " + src.material; return false; }
-                out.influences.push_back(uint16_t(slot[vx.joints[k]]));
-                out.influences.push_back(vx.weights[k]);
-                ++c;
-            }
-            if (!c) { error = "vertex without weights in " + src.material; return false; }
-            out.vcount.push_back(c);
-        }
-        // Winding: COLLADA wants CCW around the outward normal. Compare each face's geometric normal
-        // with its vertex normals (the axis change has det +1, so Frontiers space gives the same answer).
-        if (src.index_count % 3 || src.first_index + src.index_count > model.indices.size()) { error = "mesh " + src.material + " index range"; return false; }
-        const uint16_t *idx = model.indices.data() + src.first_index;
-        for (uint32_t t = 0; t + 2 < src.index_count; t += 3) {
-            const frontiers::Vertex &a = model.vertices[first + idx[t]], &b = model.vertices[first + idx[t + 1]], &c = model.vertices[first + idx[t + 2]];
-            const float e1[3] = {b.pos[0] - a.pos[0], b.pos[1] - a.pos[1], b.pos[2] - a.pos[2]};
-            const float e2[3] = {c.pos[0] - a.pos[0], c.pos[1] - a.pos[1], c.pos[2] - a.pos[2]};
-            const float g[3] = {e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]};
-            const float d = g[0] * (a.normal[0] + b.normal[0] + c.normal[0]) + g[1] * (a.normal[1] + b.normal[1] + c.normal[1]) +
-                            g[2] * (a.normal[2] + b.normal[2] + c.normal[2]);
-            if (std::fabs(d) < 1e-14f) ++out.degenerate; else if (d > 0) ++out.agreeing; else ++out.flipped;
-        }
-        out.reversed = out.flipped > out.agreeing;
-        for (uint32_t t = 0; t + 2 < src.index_count; t += 3) {
-            out.triangles.push_back(idx[t]);
-            out.triangles.push_back(idx[out.reversed ? t + 2 : t + 1]);
-            out.triangles.push_back(idx[out.reversed ? t + 1 : t + 2]);
-        }
+        if (!build_mesh(model, m, naming[m], true, out, error)) return false;
         rig.meshes.push_back(std::move(out));
     }
     return true;
@@ -250,6 +302,7 @@ inline bool build_animation(const frontiers::Model &model, const std::vector<Cli
     for (auto &c : clips) {
         RigClip out;
         out.name = c.name; out.loop = c.loop; out.ref_kmh = c.ref_kmh; out.min_rate = c.min_rate; out.max_rate = c.max_rate;
+        out.blend_seconds = c.blend_seconds;
         out.steps = c.steps;
         out.first = first; out.source_frames = c.clip.frames;
         out.frames = c.loop && c.clip.frames > 2 ? c.clip.frames - 1 : c.clip.frames;

@@ -34,7 +34,7 @@ M.rules = {
   airDelay = 0.12,                -- s off the ground before he counts as in the air (game.cpp:231; swimming or on a wall is ground)
   landMinAir = 0.35,              -- s in the air for a landing sound (beamng/sheets/events.json landing minAirSeconds)
   landHold = 0.45,                -- s, no footsteps after such a landing (events.json landing holdSeconds: the overlay plays its land clip, game.cpp:278, 350)
-  boostMinKmh = 30,               -- km/h, boost held on the ground from this speed is the boost state (beamng/sheets/states.json boost)
+  boostMinKmh = 30,               -- km/h, boost held on the ground from this speed is boosting: the boost loop and the sonic boom (beamng/sheets/states.json boost)
   stateHold = 0.1,                -- s, a ground state must be wanted this long before it starts (game.cpp:261-262)
   brakeAboveKmh = 50,             -- km/h, stick released faster than this: brake sound (game.cpp:505)
   hitBoomKmh = 120,               -- km/h, a car hit faster than this booms, slower plays 'land' (game.cpp:293)
@@ -54,6 +54,7 @@ M.rules = {
   -- native mode only:
   walkStepsBelowKmh = 16,         -- km/h, the run clip plays walk footsteps below this (the overlay's walk animation ends at 16 km/h, states.json walk maxKmh); 0: by clip only
   boostLoopFadeOut = 0.25,        -- s, the boost's looping layers fade out over this when the boost ends
+  driftLoopFadeOut = 0.25,        -- s, the drift's looping layers (drift_loop) fade out over this when the drift ends
   loopSendHz = 20,                -- loop volume and pitch are sent to the body at most this often
   loopRefreshSeconds = 1,         -- a playing loop is sent again this often (the body re-creates it after a re-init)
   sliderReadSeconds = 0.5,        -- BeamNG's volume sliders are read again this often
