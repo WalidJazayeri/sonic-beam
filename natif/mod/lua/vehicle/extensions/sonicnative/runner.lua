@@ -37,6 +37,7 @@ local loggedMaterial = nil
 local gliding = false
 local groundGap = math.huge    -- metres from the ball's bottom down to the ground (updateGFX)
 local snapLock = 0             -- seconds left without ground snap (after a jump)
+local flightTime = nil         -- seconds since a ground jump's push ended, until he lands (nil: not in one)
 local ballCenter, ballRadius = nil, 0
 local up = vec3(0, 0, 1)
 local walker = nil             -- BeamNG's playerController and its original functions
@@ -337,16 +338,26 @@ local function onPhysicsStep(dt)
     -- landing on the water while running: stop the plunge at once (deep under it, BeamNG's water drag
     -- on the soft body killed his speed)
     if not swimming and vel.z < 0 then a = a - up * (vel.z * P.waterLandDamping) end
-  elseif grounded then
+  elseif grounded and jumpTimer <= 0 then
     a = a - up * math.min(P.maxDownforce, P.downforce * speed * speed)
   else
     a = a - up * P.extraGravity
-    -- Like Frontiers, a fast Sonic sticks to the ground instead of flying off every seam
-    if snapLock <= 0 and groundGap < P.snapMeters and speed > P.snapKmh / 3.6 then a = a - up * P.snapAccel end
+    if flightTime and jumpTimer <= 0 then
+      -- a jump keeps the arc of a jump from standstill: what pulls the fast body down is taken back
+      flightTime = flightTime + dt
+      local want = jumpSpeed - (9.81 + P.extraGravity) * flightTime
+      a = a + up * clamp((want - vel.z) * P.jumpTrackGain, -P.jumpTrackMax, P.jumpTrackMax)
+    elseif snapLock <= 0 and groundGap < P.snapMeters and speed > P.snapKmh / 3.6 then
+      -- Like Frontiers, a fast Sonic sticks to the ground instead of flying off every seam
+      a = a - up * P.snapAccel
+    end
   end
   snapLock = math.max(0, snapLock - dt)
   applyAccelEverywhere(a)
   if jumpTimer > 0 then
+    -- closed loop: the push aims at jumpSpeed upward by the end of it, whatever the sliding ball and
+    -- the ground take at speed (a fixed push lost most of the jump past ~300 km/h: no lift at 550)
+    jumpAccel = math.max(0, jumpSpeed - vel.z) / math.max(jumpTimer, dt)
     jumpTimer = jumpTimer - dt
     applyAccelEverywhere(up * jumpAccel)
   end
@@ -524,8 +535,11 @@ local function updateGFX(dt)
       snapLock = 0.6
       jumpAccel = math.max(0, jumpSpeed - vz) / jumpTimer
       jumpsToReport = jumpsToReport + 1
+      flightTime = 0
     end
   end
+  -- the jump's arc ends on landing, on the water or on a wall
+  if flightTime and (waterState ~= 0 or wallState ~= 0 or (grounded and flightTime > 0.1) or flightTime > 4) then flightTime = nil end
   local _, amount = inputDirection()
   local boosting = (boostHeld > 0.5 and amount > 0.1) and 1 or 0
   -- direction held in the air, for the jump ball's tricks: 1 left, 2 right, 3 back
@@ -558,7 +572,7 @@ local function onExtensionLoaded()
 end
 
 local function onReset()
-  jumpTimer, jumpQueued, walkX, walkY = 0, false, 0, 0
+  jumpTimer, jumpQueued, walkX, walkY, flightTime = 0, false, 0, 0, nil
   speedTarget, learnedPush = 0, 0
   gliding = true
   setGlide(false)

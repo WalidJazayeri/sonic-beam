@@ -5,6 +5,10 @@ Le mode natif (dossier `natif/`) a ses propres versions : le numéro est dans `n
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## natif-v0.2.1
+- Saut à grande vitesse corrigé : plus Sonic allait vite, plus son saut s'écrasait (environ 3,2 m à l'arrêt, 1,9 m à 300 km/h, 0,8 m à 560 km/h, au point qu'on n'entendait que le son du saut). La poussée du saut vise maintenant la vitesse de saut réelle quoi que le sol en prenne, et pendant tout le saut sa hauteur suit l'arc d'un saut à l'arrêt : ce que BeamNG retire au corps de marche rapide lui est rendu. Mesuré sur Gridmap V2, en boost, terrain plat : 3,4 m à l'arrêt, 3,1 m à 300 km/h, 2,7 m à 560 km/h, environ 1,2 s en l'air.
+- Le mode superposé (en pause) a la même physique, donc le même défaut ; il n'est pas corrigé.
+
 ## natif-v0.2.0
 - Sons de Sonic par l'audio de BeamNG : pas selon le sol (béton, terre, herbe, sable, neige, eau, métal), atterrissage selon le sol, saut, boost (départ puis souffle en boucle tant qu'il boost), freinage, vent qui monte avec la vitesse, bang supersonique (boost relancé au-dessus de 200 km/h, choc contre une voiture au-dessus de 120 km/h). Les règles et les volumes sont ceux du mode superposé. Les sons suivent Sonic, même en boost.
 - Plus riche que le superposé : toutes les variantes de Frontiers sont jouées au hasard (jusqu'à 12 bruits de pas différents sur la terre, au lieu d'un seul), et toutes les couches des sons à plusieurs couches (boost, saut, bang).

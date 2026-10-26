@@ -16,6 +16,10 @@ M.physics = {
   airControl = 0.35,          -- share of ground control kept in the air
   jumpSpeed = 10,             -- m/s, upward speed of a jump (about 3 m high)
   extraGravity = 6,           -- m/s2
+  -- native only: during a jump his height follows the arc of a jump from standstill, whatever his
+  -- speed (BeamNG pulled the fast walking body down hard: 0.8 m jumps at 560 km/h)
+  jumpTrackGain = 45,         -- 1/s, how fast the vertical speed is pulled back onto the arc
+  jumpTrackMax = 90,          -- m/s2, largest correction
   waterRunDepth = -0.05,      -- m, the ball skims this far under the surface (negative: above it)
   swimDepth = 0.15,           -- m
   waterSpring = 80,           -- 1/s2
