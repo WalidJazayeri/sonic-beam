@@ -2,8 +2,9 @@
 -- Sonic Beam, native mode: the O menu, the Lab and the Unstuck key. The menu (Sonic mode, speed
 -- limit, top speed, boost acceleration, speedometer, Unstuck, Lab) and the Lab are the overlay's
 -- (beamng/mod/lua/ge/extensions, sonicfrontiers/sonic.lua drawMenu and drawLab, v0.12.3), with the
--- Lab tabs the native mode has: Sound, Water, Wall, Impact, Jump, Animation. Values apply live
--- through sonicnative_body.setSettings, sonicnative_sound.setSettings and sonicnative_main.setTuning.
+-- Lab tabs the native mode has: Sound, Boost, Aura, Water, Wall, Impact, Jump, Animation. Values
+-- apply live through sonicnative_body.setSettings, sonicnative_sound.setSettings,
+-- sonicnative_fx.setSettings (the boost effects) and sonicnative_main.setTuning.
 -- The player's settings are saved in the user folder (settings/sonicnative.json) when the menu or
 -- the Lab closes, and loaded when this extension loads, before Sonic takes a body. Unstuck is
 -- sonicnative_body's. Keys: input actions sonicnative_menu (O) and sonicnative_unstuck (U), in
@@ -16,6 +17,7 @@ local logTag = 'sonicnative'
 local config = require('sonicnative/config')
 local soundConfig = require('sonicnative/sounds')
 local animConfig = require('sonicnative/anim')
+local effects = require('sonicnative/effects')
 local json = require('json')
 
 local SETTINGS_FILE = 'settings/sonicnative.json'
@@ -30,6 +32,7 @@ add('jumpStyle', animConfig.tuning.jumpStyle, 'anim')
 add('ballSpinTurns', -1, 'anim')    -- main.lua's default: -1 spins the ball at Frontiers' own speed (the manifest's ball.spinSeconds)
 add('animSpeed', animConfig.tuning.animSpeed, 'anim')
 add('animLimit', animConfig.tuning.animLimit, 'anim')
+for k, v in pairs(effects.settings) do add(k, v, 'fx') end    -- boost effects: trail, lightning, blur, aura, light
 add('showSpeed', true, 'menu')      -- the speedometer (overlay default, beamng/mod sonic.lua settings.showSpeed)
 
 -- the settings' setters: module, function
@@ -37,19 +40,21 @@ local SETTERS = {
   body = {'sonicnative_body', 'setSettings'},
   sound = {'sonicnative_sound', 'setSettings'},
   anim = {'sonicnative_main', 'setTuning'},
+  fx = {'sonicnative_fx', 'setSettings'},
 }
 local CHOICES = {
   sonicMode = {auto = true, always = true, off = true},
   impactMode = {mass = true, plow = true, bounce = true, off = true},
 }
 -- a dragged slider sends the body's settings at most this often (each send is a log line in the
--- walking body's Lua); the sounds and the animation take them every frame
+-- walking body's Lua); the sounds, the animation and the effects take them every frame
 local BODY_SEND_SECONDS = 0.2
 
 local settings = {}
 for k, v in pairs(defaults) do settings[k] = v end
 local loadedFrom = 'defaults'      -- 'defaults', 'file' or 'unreadable' (status)
 local dirty = {}                   -- target -> changed since last sent
+local sentTo = {}                  -- target -> the extension table its settings were last sent to
 local clock, bodySentAt = 0, -100
 
 local function loaded(name)
@@ -104,6 +109,7 @@ local function send(target)
   if target == 'body' then bodySentAt = clock end
   local s = SETTERS[target]
   local e = s and loaded(s[1])
+  if e then sentTo[target] = e end
   if not (e and type(e[s[2]]) == 'function') then return end
   local values = {}
   for k, v in pairs(settings) do
@@ -122,8 +128,14 @@ local function changed(key)
 end
 
 local function sendChanges()
+  -- a module loaded after the menu, or reloaded, has not had the settings yet: it gets them now
+  for target, s in pairs(SETTERS) do
+    local e = loaded(s[1])
+    if e and e ~= sentTo[target] then dirty[target] = true end
+  end
   if dirty.sound then send('sound') end
   if dirty.anim then send('anim') end
+  if dirty.fx then send('fx') end
   if dirty.body and clock - bodySentAt >= BODY_SEND_SECONDS then send('body') end
 end
 
@@ -159,8 +171,10 @@ end
 -- Sonic Beam Lab: settings we tune together, opened from the O menu. Saved when the Lab closes.
 local LAB_MIN_DB, LAB_MAX_DB = soundConfig.rules.muteDb, 12   -- the overlay's range; the lowest mutes
 local LAB_FLOATS = {'stepsDb', 'soundDb', 'windDb', 'boostBoomKmh', 'waterRunKmh', 'swimKmh', 'wallRunKmh', 'wallGrip',
-  'impactForce', 'carDamage', 'ballSpinTurns', 'jumpHeight', 'animSpeed', 'animLimit'}
-local LAB_BOOLS = {'boostBoom', 'runOnWater', 'runOnWalls'}
+  'impactForce', 'carDamage', 'ballSpinTurns', 'jumpHeight', 'animSpeed', 'animLimit',
+  'trailLength', 'trailIntensity', 'lightning', 'trailFade', 'fxSpeedAmount', 'blurStrength', 'boostLight',
+  'auraIntensity', 'auraLightning'}
+local LAB_BOOLS = {'boostBoom', 'runOnWater', 'runOnWalls', 'fxBySpeed'}
 local labOpen, labWidgets = false, nil
 
 local function openLab(tab)
@@ -186,6 +200,10 @@ local UNITS = {
   times = {value = function(x) return string.format('x%.2f', x) end, reset = function(x) return string.format('x%g', x) end},
   kmh = {value = function(x) return string.format('%.0f km/h', x) end, reset = function(x) return string.format('%g', x) end},
   seconds = {value = function(x) return string.format('%.1f s', x) end, reset = function(x) return string.format('%g s', x) end},
+  metres = {value = function(x) return string.format('%.2f m', x) end, reset = function(x) return string.format('%g m', x) end},
+  -- Speed influence: the share of the effects that follows the speed, and what they start from at standstill
+  influence = {value = function(x) return string.format('%.2f (from %d %%)', x, math.floor((1 - x) * 100 + 0.5)) end,
+    reset = function(x) return string.format('%g', x) end},
   turns = {value = function(x) return x < 0 and "Frontiers' speed" or string.format('%.1f turns/s', x) end,
     reset = function(x) return x < 0 and 'Frontiers' or string.format('%g', x) end},
 }
@@ -266,6 +284,13 @@ local JUMP_STYLES = {
   {id = 2, label = 'Ball, and a trick when you hold a direction in the air (A, D or S)'},
 }
 
+-- Lab, Boost tab: the speed at which the boost effects are at full strength, the O menu's top
+-- speed, or effects.lua's reference when the speed limit is off (overlay sonic.lua fxReferenceKmh)
+local function fxReferenceKmh()
+  local c = effects.common
+  return settings.speedCapOn and math.max(c.refKmhMin, settings.speedCapKmh) or c.refKmhNoCap
+end
+
 local function drawLab()
   if not labOpen or not im then return end
   local w = labWidgets
@@ -287,6 +312,30 @@ local function drawLab()
       if not on then im.BeginDisabled(true) end
       labSlider('  at speed', 'boostBoomKmh', 50, 1000, UNITS.kmh)
       if not on then im.EndDisabled() end
+      im.EndTabItem()
+    end
+    if labTab('Boost') then
+      labSlider('Trail length', 'trailLength', 0.25, 3, UNITS.times)
+      labSlider('Trail intensity', 'trailIntensity', 0, 2, UNITS.times)
+      labSlider('Lightning', 'lightning', 0, 2, UNITS.times)
+      labSlider('Trail start fade', 'trailFade', 0, 4, UNITS.metres)
+      im.Spacing()
+      local bySpeed = labSwitch("Effects follow Sonic's speed", 'fxBySpeed')
+      im.TextUnformatted(string.format('  full effects at %.0f km/h (%s)', fxReferenceKmh(),
+        settings.speedCapOn and 'top speed, O menu' or 'speed limit off'))
+      if not bySpeed then im.BeginDisabled(true) end
+      labSlider('Speed influence', 'fxSpeedAmount', 0, 1, UNITS.influence)
+      if not bySpeed then im.EndDisabled() end
+      im.Spacing()
+      labSlider('Speed blur strength', 'blurStrength', 0, 2, UNITS.times)
+      labSlider('Boost light', 'boostLight', 0, 2, UNITS.times)   -- native only: the blue light of a boost start
+      im.EndTabItem()
+    end
+    if labTab('Aura') then
+      -- the overlay's body-shape switch, thickness and length are not in the native mode
+      im.TextUnformatted('The blue aura on Sonic while he boosts or runs fast:')
+      labSlider('Aura intensity', 'auraIntensity', 0, 2, UNITS.times)
+      labSlider('Aura lightning', 'auraLightning', 0, 3, UNITS.times)
       im.EndTabItem()
     end
     if labTab('Water') then
@@ -443,7 +492,7 @@ end
 local function onExtensionLoaded()
   setExtensionUnloadMode(M, 'manual')
   loadSettings()
-  sendAll()   -- before Sonic takes a body: the body sends them on with its first frame
+  sendAll()   -- before Sonic takes a body: the body sends them on with its first frame (a module loaded later: sendChanges)
   log('I', logTag, 'Sonic Beam menu loaded')
 end
 

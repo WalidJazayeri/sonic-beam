@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // sonicnative_convert: turns Sonic from the player's own Sonic Frontiers install into a skinned,
-// animated COLLADA shape (every clip the overlay mode plays), a still shape of his spin ball shell, BeamNG
-// materials, DDS textures and WAV sounds inside the BeamNG user folder (<userpath>\current\mods\sonicnative_data).
+// animated COLLADA shape (every clip the overlay mode plays, with his boost aura shell), a still shape of his
+// spin ball shell, BeamNG materials, DDS textures, the boost effects' materials and bone tracks, and WAV sounds
+// inside the BeamNG user folder (<userpath>\current\mods\sonicnative_data).
 // Nothing it writes belongs in the repository or a package.
 #include <algorithm>
 #include <cstdio>
@@ -20,6 +21,7 @@
 #include "frontiers_material.hpp"
 #include "fixture.hpp"
 #include "sounds.hpp"
+#include "fx.hpp"
 #include <tlhelp32.h>   // after windows.h (text.hpp)
 
 #ifndef SONICNATIVE_VERSION
@@ -44,6 +46,7 @@ struct Options {
     std::string clips = sonic_data::kDefaultClips;
     Split split = Split::clips;
     bool fixture = false, bind_only = false, flip_green = false, srgb = true, flat = false, uv_clamp = true, sounds = true, ball = true;
+    bool aura = true, fx = true, locus_fallback = false;
 };
 
 void usage()
@@ -51,7 +54,8 @@ void usage()
     std::printf("sonicnative_convert %s\n"
                 "usage: sonicnative_convert --userpath <BeamNG user folder> [--frontiers <Sonic Frontiers folder>]\n"
                 "                           [--clips <ids>] [--split clips|cs] [--bind-only] [--flat] [--flip-green] [--no-srgb]\n"
-                "                           [--no-uv-clamp] [--no-sounds] [--no-ball] [--fixture] [--out <folder>]\n"
+                "                           [--no-uv-clamp] [--no-sounds] [--no-ball] [--no-aura] [--no-fx] [--locus-fallback]\n"
+                "                           [--fixture] [--out <folder>]\n"
                 "  --userpath    the folder BeamNG runs with (-userpath); output goes to <it>\\current\\mods\\%s\n"
                 "  --frontiers   default: frontiers= line of %%LOCALAPPDATA%%\\SonicBeam\\settings.ini\n"
                 "  --clips       comma-separated clip ids, default all of them:\n                %s\n",
@@ -64,6 +68,9 @@ void usage()
                 "  --no-uv-clamp keep UVs outside [0,1] on clamp-addressed textures (eyes) as they are\n"
                 "  --no-sounds   leave Sonic's sounds out (default: every waveform of his sound cues as WAV into %s\\sounds)\n"
                 "  --no-ball     leave the spin ball shell out (default: a second, still shape sonic\\ball_<hash>.dae)\n"
+                "  --no-aura     leave the boost aura shell out of Sonic's shape (default: meshes aura_a and aurahalo_a)\n"
+                "  --no-fx       leave every boost effect out: aura, effect textures and materials, bone tracks (implies --no-aura)\n"
+                "  --locus-fallback  computed streaks instead of Frontiers' locus01 (BC6H) for the boost trail\n"
                 "  --fixture     synthetic 2-joint test shape (clips idle, lean) into %s\\fixture, no Frontiers data, no sounds\n"
                 "  --out         write the package into this folder instead of the user folder, for inspection: no BeamNG\n"
                 "                cache is touched, so it also runs while BeamNG does (--userpath is then not needed);\n"
@@ -207,12 +214,20 @@ struct Package {
     Rig ball;
     std::string ball_materials_json;
     float ball_radius = 0;           // model units, around the shell's middle (its origin)
+    // Boost effects (natif plan fx): the aura shell is in rig (meshes + Sonic's materials); the effect quads'
+    // materials go to their own file, the bone tracks to fx_bones_<hash>.json
+    bool with_aura = false, with_fx = false;
+    std::string fx_materials_json, bones_json;
+    std::vector<const sonic_data::FxKind *> fx_kinds;   // kinds with a texture and materials, in kFxKinds order
 };
 
 const char *const kBallStem = "ball";
 const char *const kBallMaterialsFile = "sonicnative_ball.materials.json";
 const char *const kBallDatablocksFile = "sonicnative_ball.datablocks.json";
 const char *const kBallDatablock = "sonicnative_ball_db";
+const char *const kFxMaterialsFile = "sonicnative_fx.materials.json";
+const char *const kBonesStem = "fx_bones";
+const char *const kAuraTextureFile = "tex/sonicnative_fx_aura.dds";
 
 std::string vfs(const Package &p, const std::string &file) { return std::string("/mods/") + kDataFolder + "/" + p.folder + "/" + file; }
 std::string sounds_vfs() { return std::string("/mods/") + kDataFolder + "/sounds/"; }
@@ -309,6 +324,32 @@ std::string manifest_json(const Package &p, const Options &o, const std::string 
              ", \"radius\": " + json_num(p.ball_radius * scale) +
              ", \"vertices\": " + std::to_string(bverts) + ", \"triangles\": " + std::to_string(btris) + "}";
     }
+    // Boost effects: the material of kind K at ladder level k (1-based in alphas) is <material>_<k>; the aura's
+    // meshes are in the shape, its base materials in Sonic's materials, its ladder levels are setSkinName(skins % k).
+    if (p.with_fx) {
+        std::string alphas, sprites, ribbons;
+        for (int k = 1; k <= sonic_data::kFxLevels; ++k) alphas += (k > 1 ? ", " : "") + json_num(sonic_data::fx_alpha(k));
+        for (const sonic_data::FxKind *kind : p.fx_kinds) {
+            std::string &list = kind->ribbon ? ribbons : sprites;
+            list += (list.empty() ? "" : ", ") + json_escape(kind->kind) + ": {\"material\": " + json_escape(std::string("sonicnative_fx_") + kind->kind);
+            if (kind->grid_u) list += ", \"grid\": [" + std::to_string(kind->grid_u) + ", " + std::to_string(kind->grid_v) + "]";
+            list += "}";
+        }
+        s += ",\n  \"fx\": {\"version\": 1, \"materials\": " + json_escape(vfs(p, kFxMaterialsFile)) + ",\n    \"alphas\": [" + alphas + "],\n" +
+             "    \"sprites\": {" + sprites + "},\n    \"ribbons\": {" + ribbons + "}";
+        if (p.with_aura) {
+            std::string meshes, materials, alpha;
+            for (auto &L : sonic_data::kAuraLayers) {
+                meshes += (meshes.empty() ? "" : ", ") + json_escape(L.object);
+                materials += (materials.empty() ? "" : ", ") + json_escape(L.material);
+                alpha += (alpha.empty() ? "" : ", ") + json_num(L.alpha);
+            }
+            s += ",\n    \"aura\": {\"meshes\": [" + meshes + "], \"materials\": [" + materials + "], \"skins\": \"l%02d\", \"alpha\": [" + alpha +
+                 "], \"colour\": " + json_vec(sonic_data::kAuraColour, 3) + "}";
+        }
+        if (!p.bones_json.empty()) s += ",\n    \"bones\": {\"file\": " + json_escape(vfs(p, std::string(kBonesStem) + "_" + hash + ".json")) + "}";
+        s += "}";
+    }
     // Sounds: random = one file per play, layers = all files together; a loop loops each whole file.
     if (p.with_sounds) s += ",\n  \"sounds\": " + sounds_json(p.sounds, sounds_vfs());
     s += "\n}\n";
@@ -348,13 +389,16 @@ bool write_package(const fs::path &data, const fs::path &cache, const Package &p
     const fs::path sounds = data / L"sounds";
     const size_t stale = remove_stale(dir, widen(p.stem + "_"), {L".dae", L".cdae", L".cs"}) +
                          remove_stale(dir, widen(std::string(kBallStem) + "_"), {L".dae", L".cdae"}) +
+                         remove_stale(dir, widen(std::string(kBonesStem) + "_"), {L".json"}) +
                          remove_stale(dir / L"tex", L"sonicnative_", {L".dds"});
-    if (!p.with_ball)
-        for (const char *f : {kBallMaterialsFile, kBallDatablocksFile}) {
-            const fs::path old = dir / widen(f);
-            std::error_code rec;
-            if (!fs::remove(old, rec) && rec) { std::printf("error: cannot remove %s: %s\n", narrow(old.wstring()).c_str(), rec.message().c_str()); return false; }
-        }
+    std::vector<const char *> unused;
+    if (!p.with_ball) { unused.push_back(kBallMaterialsFile); unused.push_back(kBallDatablocksFile); }
+    if (!p.with_fx) unused.push_back(kFxMaterialsFile);
+    for (const char *f : unused) {
+        const fs::path old = dir / widen(f);
+        std::error_code rec;
+        if (!fs::remove(old, rec) && rec) { std::printf("error: cannot remove %s: %s\n", narrow(old.wstring()).c_str(), rec.message().c_str()); return false; }
+    }
     const size_t stale_sounds = p.with_sounds ? remove_stale(sounds, L"", {L".wav"}) : 0;   // the sounds folder is ours
     const bool had_cache = !cache.empty() && fs::exists(cache, ec);
     if (!cache.empty()) {
@@ -401,6 +445,8 @@ bool write_package(const fs::path &data, const fs::path &cache, const Package &p
         texts.push_back({dir / widen(kBallDatablocksFile), "{\n  " + json_escape(kBallDatablock) + ": {\"name\": " + json_escape(kBallDatablock) +
                          ", \"class\": \"StaticShapeData\", \"shapeFile\": " + json_escape(vfs(p, ball_file)) + "}\n}\n"});
     }
+    if (p.with_fx) texts.push_back({dir / widen(kFxMaterialsFile), p.fx_materials_json});
+    if (p.with_fx && !p.bones_json.empty()) texts.push_back({dir / widen(std::string(kBonesStem) + "_" + hash + ".json"), p.bones_json});
     for (auto &t : texts) {
         if (!write_file(t.first.wstring(), t.second)) { std::printf("error: cannot write %s\n", narrow(t.first.wstring()).c_str()); return false; }
         std::printf("wrote %s (%zu bytes)\n", narrow(t.first.wstring()).c_str(), t.second.size());
@@ -595,6 +641,119 @@ bool prepare_ball(const frontiers::Pac &pac, const Options &o, Package &p)
     return true;
 }
 
+// Adds entries to a materials file text ("{\n<entries>\n}\n").
+void append_materials(std::string &json, const std::string &entries)
+{
+    if (entries.empty()) return;
+    const size_t close = json.rfind('}');
+    if (close == std::string::npos) { json = "{\n" + entries + "\n}\n"; return; }
+    json.resize(close);
+    while (!json.empty() && (json.back() == '\n' || json.back() == ' ')) json.pop_back();
+    json += (json.size() > 1 ? ",\n" : "\n") + entries + "\n}\n";
+}
+
+// Frontiers' boost aura shell as two more skinned meshes of Sonic (natif plan fx): it has his joints, so it follows
+// every clip with no data of its own; Lua shows it with setMeshHidden. Its materials go into Sonic's own file (they
+// bind when the shape loads): base_<name> at the full aura, and lNN_<name> for each ladder level, which
+// setSkinName("lNN") picks. Optional like the ball: a missing or different shell, or its texture, only leaves it out.
+bool prepare_aura(const frontiers::Pac &pac, const frontiers::Model &model, Package &p)
+{
+    std::string error;
+    frontiers::Model aura;
+    if (!frontiers::parse_model(pac, sonic_data::kAuraModelEntry, aura, error)) { std::printf("  warning: boost aura left out (%s)\n", error.c_str()); return false; }
+    if (!same_skeleton(aura, model, error)) { std::printf("  warning: boost aura left out (%s: %s)\n", sonic_data::kAuraModelEntry, error.c_str()); return false; }
+    const frontiers::PacEntry *tex = pac.find(sonic_data::kAuraTextureEntry);
+    frontiers::Texture info;
+    if (!tex || !frontiers::parse_dds(*tex, info, error)) {
+        std::printf("  warning: boost aura left out (%s: %s)\n", sonic_data::kAuraTextureEntry, tex ? error.c_str() : "missing");
+        return false;
+    }
+    std::vector<RigMesh> meshes;
+    for (auto &L : sonic_data::kAuraLayers) {
+        RigMesh m;
+        if (!build_aura_layer(aura, L, m, error)) { std::printf("  warning: boost aura left out (%s)\n", error.c_str()); return false; }
+        meshes.push_back(std::move(m));
+    }
+    std::printf("boost aura: %s, %zu nodes (Sonic's), %zu mesh(es), %zu vertices, %zu triangles; texture %s %s %ux%u, %u mip(s), copied as is\n",
+                sonic_data::kAuraModelEntry, aura.nodes.size(), aura.meshes.size(), aura.vertices.size(), aura.indices.size() / 3,
+                sonic_data::kAuraTextureEntry, dxgi_name(info.dxgi), info.width, info.height, info.mips);
+    if (aura.meshes.size() > 1) std::printf("  note: the aura has %zu meshes, only the first is used\n", aura.meshes.size());
+    TextureOut t;
+    t.file = kAuraTextureFile;
+    t.bytes.assign(tex->data, tex->data + tex->size);   // an energy mask: UNORM, no sRGB header
+    p.textures.push_back(std::move(t));
+    const std::string texture = vfs(p, kAuraTextureFile);
+    std::string entries;
+    for (size_t i = 0; i < meshes.size(); ++i) {
+        const sonic_data::AuraLayer &L = sonic_data::kAuraLayers[i];
+        std::printf("  aura layer %-10s push %.3f, uv x%.2f, share %.2f -> %s + %d levels %s..%s\n", L.object, L.push, L.uv_scale, L.alpha,
+                    L.material, sonic_data::kFxLevels, aura_level_name(L.material, 1).c_str(), aura_level_name(L.material, sonic_data::kFxLevels).c_str());
+        entries += (entries.empty() ? "" : ",\n") + aura_material(L.material, L, sonic_data::kAuraOpacity, texture);
+        for (int k = 1; k <= sonic_data::kFxLevels; ++k) entries += ",\n" + aura_material(aura_level_name(L.material, k), L, sonic_data::fx_alpha(k), texture);
+        p.rig.meshes.push_back(std::move(meshes[i]));
+    }
+    append_materials(p.materials_json, entries);
+    p.with_aura = true;
+    return true;
+}
+
+// The textures and materials of the effect quads Lua draws (natif plan fx): Frontiers' BC7 / BC6H textures
+// copied block for block, the flash glow and shock ring baked from their BC5 masks, the beam's edge computed.
+// A texture that cannot be made only leaves its kind out (the manifest then lacks it).
+void prepare_fx(const Options &o, const frontiers::Pac &pac, Package &p)
+{
+    std::string error;
+    frontiers::Pac effects;
+    const std::wstring archive = o.frontiers + L"\\" + sonic_data::kEffectArchive;
+    const bool have_effects = effects.load(archive, error);
+    if (have_effects) std::printf("boost effects from %s and %s\n", narrow(archive).c_str(), narrow(sonic_data::kArchive).c_str());
+    else std::printf("  warning: %s: %s: the effects drawn with its textures are left out\n", narrow(archive).c_str(), error.c_str());
+    std::string json;
+    for (const sonic_data::FxKind &kind : sonic_data::kFxKinds) {
+        const std::string file = std::string("tex/sonicnative_fx_") + kind.kind + ".dds";
+        TextureOut t;
+        t.file = file;
+        std::string how;
+        const frontiers::PacEntry *entry = nullptr;
+        frontiers::Texture info;
+        error.clear();
+        if (kind.entry) {
+            if (kind.effect_archive && !have_effects) { std::printf("  warning: %s left out (no %s)\n", kind.kind, narrow(sonic_data::kEffectArchive).c_str()); continue; }
+            entry = (kind.effect_archive ? effects : pac).find(kind.entry);
+            if (!entry || !frontiers::parse_dds(*entry, info, error)) {
+                std::printf("  warning: %s left out (%s: %s)\n", kind.kind, kind.entry, entry ? error.c_str() : "missing");
+                continue;
+            }
+        }
+        if (kind.made == sonic_data::FxMade::beam) {
+            t.bytes = beam_texture();
+            how = "computed (soft edge), B8G8R8A8 256x4";
+        } else if (kind.made == sonic_data::FxMade::copy && kind.entry == sonic_data::kLocusEntry && o.locus_fallback) {
+            t.bytes = locus_fallback_texture();
+            how = std::string("computed streaks (--locus-fallback, not ") + kind.entry + "), B8G8R8A8 256x256";
+        } else if (kind.made == sonic_data::FxMade::copy) {
+            t.bytes.assign(entry->data, entry->data + entry->size);
+            char b[96];
+            std::snprintf(b, sizeof(b), "%s %ux%u, %u mip(s), copied as is", info.dxgi == 95 ? "BC6H_UF16" : info.dxgi == 96 ? "BC6H_SF16" : dxgi_name(info.dxgi),
+                          info.width, info.height, info.mips);
+            how = std::string(kind.entry) + " " + b;
+        } else {
+            std::vector<float> mask;
+            if (!bc5_mask(info, mask, error)) { std::printf("  warning: %s left out (%s: %s)\n", kind.kind, kind.entry, error.c_str()); continue; }
+            const bool ring = kind.made == sonic_data::FxMade::ring;
+            t.bytes = flash_texture(mask, info.width, info.height, ring);
+            how = std::string(kind.entry) + (ring ? " -> shock ring" : " -> flash glow") + " baked from its mask, B8G8R8A8 256x256";
+        }
+        std::printf("  %-6s %-32s %s\n", kind.kind, file.c_str(), how.c_str());
+        json += (json.empty() ? "" : ",\n") + effect_kind_materials(kind, vfs(p, file));
+        p.textures.push_back(std::move(t));
+        p.fx_kinds.push_back(&kind);
+    }
+    p.fx_materials_json = "{\n" + json + (json.empty() ? "" : "\n") + "}\n";
+    std::printf("  %zu effect kinds x %d levels in %s\n", p.fx_kinds.size(), sonic_data::kFxLevels, kFxMaterialsFile);
+    p.with_fx = true;
+}
+
 // Sonic from the player's install.
 bool prepare_sonic(const Options &o, Package &p, std::string &hash_input)
 {
@@ -624,6 +783,9 @@ bool prepare_sonic(const Options &o, Package &p, std::string &hash_input)
     if (o.ball) prepare_ball(pac, o, p);
 
     if (!build_bind(model, naming, o.flat, p.rig, error)) { std::printf("error: %s\n", error.c_str()); return false; }
+    // Boost effects: the aura shell joins Sonic's meshes (his joints), then the effect textures and materials
+    if (o.fx && o.aura) prepare_aura(pac, model, p);
+    if (o.fx) prepare_fx(o, pac, p);
     if (o.bind_only) return true;
     std::vector<ClipSource> clips;
     for (const std::string &id : clip_ids(o.clips)) {
@@ -648,6 +810,15 @@ bool prepare_sonic(const Options &o, Package &p, std::string &hash_input)
     }
     if (clips.empty()) { std::printf("error: no clips (use --bind-only for a bind pose)\n"); return false; }
     if (!build_animation(model, clips, p.rig, error)) { std::printf("error: %s\n", error.c_str()); return false; }
+    if (o.fx) {   // the lightning on Sonic's body follows these joints through every clip
+        std::vector<std::string> found, missing;
+        p.bones_json = bones_json(model, clips, p.rig, found, missing);
+        uint32_t frames = 0;
+        for (auto &c : p.rig.clips) frames += c.frames;
+        std::printf("fx bones: %zu joints x %u frames over %zu clips (%zu bytes)\n", found.size(), frames, p.rig.clips.size(), p.bones_json.size());
+        for (auto &m : missing) std::printf("  warning: no joint %s for the fx bones\n", m.c_str());
+        if (found.empty()) p.bones_json.clear();
+    }
     return true;
 }
 
@@ -694,6 +865,9 @@ int wmain(int argc, wchar_t **argv)
         else if (a == L"--no-uv-clamp") o.uv_clamp = false;
         else if (a == L"--no-sounds") o.sounds = false;
         else if (a == L"--no-ball") o.ball = false;
+        else if (a == L"--no-aura") o.aura = false;
+        else if (a == L"--no-fx") o.fx = false;
+        else if (a == L"--locus-fallback") o.locus_fallback = true;
         else if (a == L"--out" && more) o.out = trim_folder(argv[++i]);
         else if (a == L"--help" || a == L"-h" || a == L"/?") { usage(); return 0; }
         else { std::printf("error: unknown argument '%s'\n", narrow(a).c_str()); usage(); return 2; }
@@ -754,11 +928,14 @@ int wmain(int argc, wchar_t **argv)
     hash_input += std::string("|clips=") + (o.fixture ? "idle,lean" : o.clips) + "|split=" + split_name(o.bind_only ? Split::bind : o.split) +
                   "|flip=" + (o.flip_green ? "1" : "0") + "|srgb=" + (o.srgb ? "1" : "0") + "|flat=" + (o.flat ? "1" : "0") +
                   "|uvclamp=" + (o.uv_clamp ? "1" : "0");
+    // The aura changes the shape and the fx add the bone tracks named after the hash: what this run made counts
+    if (!o.fixture) hash_input += std::string("|aura=") + (p.with_aura ? "1" : "0") + "|fx=" + (p.with_fx ? "1" : "0");
     const std::string hash = hex8(fnv1a(hash_input));
     p.ctor = "sonicnative_" + p.stem + "_" + hash + "Dae";
     print_rig(p.rig);
     if (!write_package(data, cache, p, o, hash)) return 1;
-    std::printf("done: %s, split %s, hash %s%s\n", p.folder.c_str(), split_name(o.bind_only ? Split::bind : o.split), hash.c_str(),
-                o.fixture ? "" : p.with_ball ? ", spin ball" : ", no spin ball");
+    std::printf("done: %s, split %s, hash %s%s%s%s\n", p.folder.c_str(), split_name(o.bind_only ? Split::bind : o.split), hash.c_str(),
+                o.fixture ? "" : p.with_ball ? ", spin ball" : ", no spin ball", o.fixture ? "" : p.with_aura ? ", boost aura" : ", no boost aura",
+                o.fixture ? "" : p.with_fx ? ", boost effects" : ", no boost effects");
     return 0;
 }

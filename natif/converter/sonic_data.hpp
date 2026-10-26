@@ -115,4 +115,87 @@ constexpr double kLoopBlendSeconds = 0.02;
 constexpr float kRoughness = 0.6f;
 constexpr float kMetallic = 0.0f;
 
+// Boost effects (natif plan fx): beamng/sheets/assets.json rows boost_aura_model, boost_aura_texture and
+// trail_texture (in kArchive), boost_glow_texture, boost_wave_texture, bolt_texture, arc_texture and orb_texture
+// (in kEffectArchive, relative to the Frontiers folder like kArchive).
+constexpr const wchar_t *kEffectArchive = L"image\\x64\\raw\\EffectCommon.pac";
+constexpr const char *kAuraModelEntry = "chr_sonic_aura.model";
+constexpr const char *kAuraTextureEntry = "ef_y02_so_aura01.dds";      // BC7, the aura's energy pattern
+constexpr const char *kLocusEntry = "ef_y01_so_locus01.dds";           // BC6H, the trail's streaks
+constexpr const char *kBoltEntry = "ef_i01_com_lightning02_anim.dds";  // BC7, 4x4 sheet of bolts
+constexpr const char *kArcEntry = "ef_n01_com_lightning04.dds";        // BC7, 4 columns of arcs
+constexpr const char *kOrbEntry = "ef_n01_com_glowlight13.dds";        // BC7, a glowing orb
+constexpr const char *kGlowEntry = "ef_n01_com_glowlight04.dds";       // BC5, detail of the boost flash
+constexpr const char *kRingEntry = "ef_a01_com_noisewave01_off.dds";   // BC5, detail of the shock ring
+
+// Effect colours in the overlay's gamma space (beamng/src/game.cpp 585-587 and 590-686, render11.cpp draw_aura);
+// the materials take them linear, pow(c, 2.2), since BeamNG blends in linear light.
+constexpr float kSparkColour[3] = {0.45f, 0.75f, 1.0f};   // bolts, orbs, flash glow, shock ring
+constexpr float kLocusColour[3] = {0.3f, 0.65f, 1.0f};
+constexpr float kArcColour[3] = {0.5f, 0.8f, 1.0f};
+constexpr float kBeamColour[3] = {0.08f, 0.38f, 1.0f};
+constexpr float kAuraColour[3] = {0.04f, 0.28f, 1.0f};
+constexpr float kGamma = 2.2f;
+
+// Brightness ladder of every effect material: level k (1..kFxLevels) has alpha kFxAlphaTop * kFxAlphaStep^(k - kFxLevels),
+// 0.065 to 2, 16 % apart. Lua draws a quad with the material of the level nearest its alpha (natif plan fx, section 3).
+constexpr int kFxLevels = 24;
+constexpr double kFxAlphaTop = 2.0, kFxAlphaStep = 1.16;
+constexpr float fx_alpha(int k)
+{
+    double a = kFxAlphaTop;
+    for (int i = k; i < kFxLevels; ++i) a /= kFxAlphaStep;
+    return float(a);
+}
+
+// The aura shell, drawn twice like the overlay (render11.cpp draw_aura, shared_draw.hpp vsAura/psAura): pushed along
+// its normal by `push` model units at Aura thickness 1 (the shell is inside-out, its normals point in: negative =
+// outward), UVs scaled (psAura's second sample reads uv * 1.7) and a brightness share (tint.a 0.6 / 0.35). The scroll
+// is psAura's a1 / a2 motion at fx_ratio 0.5 (pattern clock 0.6 + 2.2 * 0.5 = 1.7 /s; a1 (0, -1.3 t), a2 (0.4 t, -2.1 t)
+// in uv * 1.7 space), with the overlay's signs: the DAE holds 1 - v but Torque's COLLADA import flips it back, so
+// the shader samples Frontiers' own UVs, and BeamNG adds scrollDir * scrollSpeed * t to them (defaultMat.hlsl
+// texureAnimM). The material names start with "base" so that setSkinName("lNN") swaps them for their ladder level lNN_<rest>.
+struct AuraLayer { const char *object, *material; float push, uv_scale, alpha, scroll_u, scroll_v, scroll_speed; };
+constexpr AuraLayer kAuraLayers[] = {
+    {"aura_a",     "base_sonicnativeaura",     -0.03f,  1.0f, 0.6f,  0.0f,  -1.0f,  2.2f},
+    {"aurahalo_a", "base_sonicnativeaurahalo", -0.085f, 1.7f, 0.35f, 0.19f, -0.98f, 3.6f},
+};
+// tuning.json auraOpacity: the base materials show the aura at this level (full aura, before speed and Lab).
+constexpr float kAuraOpacity = 0.9f;
+
+// psFlat modes 2 and 3 (shared_draw.hpp): the flash glow and shock ring add output(c (1 + 0.5 s)) * s * detail,
+// in linear light c_lin (1 + 0.5 s)^2.2 * s * detail, at most 1.5^2.2 * (0.55 + 0.9) = 3.538. Their textures hold
+// (1 + 0.5 s)^2.2 * s * detail divided by that, their materials multiply it back.
+constexpr float kFlashPeak = 3.538f;
+// psFlat mode 4 (bolts, orbs, locus, arcs) adds output(c (0.6 + 0.8 t)) * saturate(1.5 a max(t)): in linear light
+// c_lin (0.6 + 0.8 t)^2.2 * 1.5 a t, 1.5 to 3.1 times c_lin a t on bright texels (2.1 at t = 1 when a = 1, where
+// the alpha clamps), under 1 on faint ones. A material is linear in t (c_lin gain a t): one gain, for the bright cores.
+constexpr float kAddGain = 2.0f;
+
+// One kind of effect quad: Lua draws sprites (camera-facing quads) and ribbons (the trail) with the materials
+// sonicnative_fx_<kind>_<level>. made: its texture is copied from an archive (copy), baked from a Frontiers mask
+// (glow, ring) or computed (beam). grid: tiles across and down its texture (0: one image).
+enum class FxMade { copy, glow, ring, beam };
+struct FxKind { const char *kind; bool ribbon; FxMade made; bool effect_archive; const char *entry; const float *colour; float gain; bool lerp; int grid_u, grid_v; };
+constexpr FxKind kFxKinds[] = {
+    {"bolt",  false, FxMade::copy, true,  kBoltEntry,  kSparkColour, kAddGain,   false, 4, 4},
+    {"orb",   false, FxMade::copy, true,  kOrbEntry,   kSparkColour, kAddGain,   false, 0, 0},
+    {"glow",  false, FxMade::glow, true,  kGlowEntry,  kSparkColour, kFlashPeak, false, 0, 0},
+    {"ring",  false, FxMade::ring, true,  kRingEntry,  kSparkColour, kFlashPeak, false, 0, 0},
+    // the beam is alpha blended, not added, so it stays blue on a bright ground (game.cpp 585, psFlat mode 5)
+    {"beam",  true,  FxMade::beam, false, nullptr,     kBeamColour,  1.0f,       true,  0, 0},
+    {"locus", true,  FxMade::copy, false, kLocusEntry, kLocusColour, kAddGain,   false, 0, 0},
+    {"arc",   true,  FxMade::copy, true,  kArcEntry,   kArcColour,   kAddGain,   false, 4, 1},
+};
+
+// Joints the lightning on Sonic's body sits on (overlay: any joint, game.cpp 600-626; here a fixed set). Their
+// model-space positions over every clip go to fx_bones_<hash>.json. Names from chr_sonic.skl.pxd: head, the six
+// quills (second segment), spine, chest, hips, both arms (upper, fore, hand), both legs (thigh, calf, foot, toe).
+constexpr const char *kFxBones[] = {
+    "Head", "Needle1_U_L", "Needle1_U_C", "Needle1_U_R", "Needle1_B_L", "Needle1_B_C", "Needle1_B_R",
+    "Spine", "Spine1", "Hips",
+    "UpperArm_L", "UpperArm_R", "ForeArm_L", "ForeArm_R", "Hand_L", "Hand_R",
+    "Thigh_L", "Thigh_R", "Calf_L", "Calf_R", "Foot_L", "Foot_R", "Toe_L", "Toe_R",
+};
+
 } // namespace sonic_data

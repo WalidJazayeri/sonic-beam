@@ -67,6 +67,9 @@ local appliedScale = nil        -- thread time scale last given to the engine
 local debugClip, debugRate = nil, 1
 local missingClips = {}
 local sonicHidden = false       -- Sonic's meshes hidden (only the ball shell shows)
+local sonicScale = 1            -- the scale field Sonic was spawned with (the manifest's scale)
+-- what place() last gave setPosRot, and the scale (for the boost effects' bone tracks, M.getAnim)
+local placed = {x = 0, y = 0, z = 0, qx = 0, qy = 0, qz = 0, qw = 1, scale = 1}
 
 -- Frontiers' spin ball shell (manifest "ball"), a second StaticShape
 -- pivot: metres above his feet of the ball's middle, which he and the shell turn about (the
@@ -395,11 +398,33 @@ local function readFeet(walker)
   return grounded
 end
 
--- Sonic's meshes hidden or shown again (only when it changes)
+-- the boost effects (sonicnative_fx), when loaded; never through extensions.<name> alone, which
+-- would load it
+local function fxModule()
+  if not extensions.isExtensionLoaded('sonicnative_fx') then return nil end
+  local fx = extensions.sonicnative_fx
+  if type(fx) == 'table' then return fx end
+end
+
+-- the boost effects' frame, after Sonic's (o == nil: they hide)
+local function runFx(dt, o)
+  local fx = fxModule()
+  if fx and fx.afterSonic then
+    local ok, err = pcall(fx.afterSonic, dt, o)
+    if not ok then report('E', 'fx', 'boost effects failed: ' .. tostring(err)) end
+  end
+end
+
+-- Sonic's meshes hidden or shown again (only when it changes); showing them all shows the aura's
+-- too, which the boost effects then set again
 local function setSonicHidden(o, hidden)
   if hidden == sonicHidden or not o then return end
   local ok, err = pcall(o.setAllMeshesHidden, o, hidden)
   if ok then sonicHidden = hidden else report('E', 'meshHidden', 'setAllMeshesHidden failed: ' .. tostring(err)) end
+  if ok and not hidden then
+    local fx = fxModule()
+    if fx and fx.onSonicMeshesShown then pcall(fx.onSonicMeshesShown, o) end
+  end
 end
 
 local function despawnBall()
@@ -474,7 +499,8 @@ local function spawn()
   ensureMaterials()
   runConstructor()
   if not ensureDatablock() then return false end
-  local o, err = spawnObject(OBJECT_NAME, datablockName, tonumber(manifest.scale) or 1)
+  sonicScale = tonumber(manifest.scale) or 1
+  local o, err = spawnObject(OBJECT_NAME, datablockName, sonicScale)
   if not o then
     report('E', 'spawn', 'cannot spawn Sonic (' .. tostring(datablockName) .. '): ' .. tostring(err))
     return false
@@ -701,6 +727,8 @@ local function place(o, dt, body, vx, vy, vz)
   tilt:set(ux, uy, uz)
   rot:setFromDir(face, tilt)
   o:setPosRot(px, py, pz, rot.x, rot.y, rot.z, rot.w)
+  placed.x, placed.y, placed.z, placed.qx, placed.qy, placed.qz, placed.qw = px, py, pz, rot.x, rot.y, rot.z, rot.w
+  placed.scale = sonicScale
 end
 
 -- the shell around the ball's middle, turned with him (game.cpp:410-414)
@@ -763,6 +791,7 @@ local function update(dt)
     end
     restoreWalker()
     lastWalkerId = nil
+    runFx(math.min(T.maxDt, dt), nil)
     return
   end
 
@@ -815,6 +844,8 @@ local function update(dt)
   end
   -- vx, vy, vz: this frame's raw velocity (status only)
   sm.vx, sm.vy, sm.vz = vx, vy, vz
+  -- the boost effects, around Sonic as he is now
+  runFx(sdt, o)
 end
 
 local function onPreRender(dtReal)
@@ -921,10 +952,16 @@ end
 -- test), the sequence really playing, its phase (0..1, estimated in engine mode), its rate and its
 -- footstep phases from the manifest; the state (id), how many states have started so far
 -- (stateCount) and the current state's enterSound; how many tricks were held in the air
--- (airTricks); whether only the ball shell shows. The same table every call: read it, do not keep it.
+-- (airTricks); whether only the ball shell shows. For the boost effects (sonicnative_fx): his
+-- smoothed speed (speedKmh, horizontal plus the climb on a wall), how far the jump ball has formed
+-- (ballAmount 0..1), the boost key, his heading (rad), his feet (a vec3), his velocity (vel =
+-- {vx, vy, vz}, the last real one) and what Sonic's StaticShape was given (place: setPosRot's x, y,
+-- z, qx, qy, qz, qw and the scale field). The same tables every call: read them, do not keep them.
 local NO_STEPS = {}
+local animVel = {0, 0, 0}
 local anim = {clip = nil, sequence = nil, phase = 0, rate = 1, steps = NO_STEPS, shown = false,
-  state = nil, stateCount = 0, enterSound = nil, airTricks = 0, ball = false}
+  state = nil, stateCount = 0, enterSound = nil, airTricks = 0, ball = false,
+  speedKmh = 0, ballAmount = 0, boostKey = false, heading = 0, feet = feet, vel = animVel, place = placed}
 M.getAnim = function()
   local c = playing and clipsByName[playing]
   local row = STATES[sm.state]
@@ -934,6 +971,9 @@ M.getAnim = function()
   anim.steps = c and c.steps or NO_STEPS
   anim.state, anim.stateCount, anim.enterSound = row.id, sm.stateCount, row.enterSound
   anim.airTricks, anim.ball = sm.airTricks, ball.shown
+  anim.speedKmh, anim.ballAmount, anim.boostKey, anim.heading = sm.speedKmh, sm.ballAmount, sm.boostKey, sm.heading
+  animVel[1], animVel[2], animVel[3] = sm.lastVx, sm.lastVy, sm.lastVz
+  anim.feet, anim.vel, anim.place = feet, animVel, placed
   return anim
 end
 

@@ -5,6 +5,19 @@ Le mode natif (dossier `natif/`) a ses propres versions : le numéro est dans `n
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## natif-v0.5.0
+- Effets du boost en natif, refaits avec les outils de BeamNG (le superposé avait ses propres shaders par-dessus l'image) :
+  - **flou de vitesse radial** vers Sonic : notre propre shader, branché dans les effets d'écran de BeamNG (Direct3D 12) ; il monte de 150 à 600 km/h et Sonic reste net au centre ;
+  - **aura bleue** : le vrai modèle d'aura de Frontiers, ajouté au modèle de Sonic en deux couches qui suivent ses os, avec un matériau lumineux additif qui défile ; son intensité suit la vitesse ;
+  - **éclairs** qui crépitent sur son corps (accrochés à 24 os grâce aux positions exportées par le convertisseur) et autour de lui ;
+  - **traînée du Power Boost** : faisceau bleu, traits et arcs électriques, reconstruits à chaque image ;
+  - **flash au départ du boost** (et lors d'un choc) : lueur, onde, orbes, gerbe d'éclairs, et une vraie lumière bleue qui éclaire le décor (nouveau par rapport au superposé).
+- Contrairement au superposé, les effets sont cachés par les murs et le décor.
+- Le convertisseur extrait l'aura et les textures d'effets de Frontiers (aucun fichier de Frontiers dans le dépôt) et écrit les matériaux des effets (24 niveaux d'intensité par effet).
+- Lab : onglets **Boost** (longueur et intensité de la traînée, éclairs, début de la traînée, effets selon la vitesse, force du flou, lumière du boost) et **Aura** (intensité, éclairs sur le corps).
+- Testé dans BeamNG (Gridmap V2) : flou, aura et éclairs forcés à 600 km/h, puis boost réel de 0 à 350 km/h avec flash, lumière, traînée, aura et flou qui montent avec la vitesse ; aucune erreur dans le journal ; environ 1,5 ms par image en boost.
+- À savoir : l'aura n'a pas le liseré lumineux exact du superposé (pas de shader sur mesure pour elle) ; sa luminosité change par paliers.
+
 ## natif-v0.4.0
 - Menu Sonic Beam sur la touche **O**, comme dans le superposé : mode de Sonic (Auto / Always / Off), limite de vitesse et vitesse max, accélération du boost, compteur de vitesse (en haut à gauche, caché quand un écran de BeamNG est ouvert), boutons Unstuck et Lab.
 - **Lab**, avec les onglets qui existent en natif : Sound (volumes des pas, de tous les sons et du vent ; bang supersonique et sa vitesse), Water, Wall, Impact, Jump (style de saut, vitesse de rotation de la boule, hauteur) et Animation (vitesse et plafond). Chaque valeur se tape au clavier en cliquant dessus, même hors de la plage du curseur, et a son bouton de retour au défaut. Les réglages s'appliquent en direct et sont enregistrés dans `settings/sonicnative.json` (un fichier à part du superposé) à chaque fermeture du menu ou du Lab. Les onglets d'effets du superposé (ombre, boost, aura) reviendront avec ces effets.
