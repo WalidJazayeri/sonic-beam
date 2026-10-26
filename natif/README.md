@@ -5,10 +5,11 @@ Sonic as a real object of BeamNG's scene, with no DLL: BeamNG itself lights him,
 This mode is separate from the overlay mode in `beamng/` (paused). It has its own mod, `sonicnative`, its own version (`natif/VERSION`, git tags `natif-vX.Y.Z`, see `CHANGELOG.md`), and every file, extension, object, material and datablock name starts with `sonicnative`. It never loads anything from `beamng/`.
 
 ## How it works
-- **Converter** (`natif/converter`, built as `natif/build/sonicnative_convert.exe`): reads Sonic from the player's own Sonic Frontiers (`sonic.pac`: model, skeleton, clips, textures) and writes a skinned, animated COLLADA shape with its materials and textures into the BeamNG user folder, under `mods/sonicnative_data/`, with a `manifest.json`. Nothing from Frontiers is ever in the repo or in the mod.
+- **Converter** (`natif/converter`, built as `natif/build/sonicnative_convert.exe`): reads Sonic from the player's own Sonic Frontiers (`sonic.pac`: model, skeleton, clips, textures; the sound banks under `image/x64/raw/sound`) and writes a skinned, animated COLLADA shape with its materials and textures, plus Sonic's sounds as WAV files, into the BeamNG user folder, under `mods/sonicnative_data/`, with a `manifest.json`. Nothing from Frontiers is ever in the repo or in the mod.
 - **Mod** (`natif/mod`, installed as `mods/unpacked/sonicnative`):
   - `sonicnative_main` loads the materials and the shape's datablock, spawns Sonic as the StaticShape `sonicnative_sonic`, keeps him at the walker's feet facing his run, hides BeamNG's walker and picks his clip and its speed.
   - `sonicnative_body` is Sonic's physics on BeamNG's walking body, ported from the overlay mode, with the vehicle extensions `sonicnative_runner` and `sonicnative_impact` and the camera `sonicnativeChase`.
+  - `sonicnative_sound` decides Sonic's sounds (steps and landings by ground type, jump, boost, brake, wind, sonic boom) with the overlay's rules; the vehicle extension `sonicnative_sfx` plays the converter's WAVs (`mods/sonicnative_data/sounds`) through BeamNG's audio, attached to Sonic's body.
 
 ## Convert
 Close BeamNG first, build the converter (`natif\build.ps1 -Converter`), then run it for the dev user folder (its options are described in `natif/converter`):
@@ -24,7 +25,7 @@ powershell -ExecutionPolicy Bypass -File natif\build.ps1 -Install           # + 
 powershell -ExecutionPolicy Bypass -File natif\build.ps1 -Install -Normal   # + mod into %LOCALAPPDATA%\BeamNG\BeamNG.drive\current
 ```
 - The Lua check runs `luac -p` on every file of `natif/mod`, and refuses globals missing from the list in `build.ps1` and any global written by mistake.
-- `-Install` deletes the old `mods\unpacked\sonicnative` before copying. `-Normal` refuses while BeamNG runs.
+- `-Install` updates `mods\unpacked\sonicnative` in place (never deletes the folder first: a running game would drop Sonic's camera mode) and removes files that left `natif\mod`. `-Normal` refuses while BeamNG runs.
 - Keep only one mode active in a user folder: the overlay mod (`sonicfrontiers_sonic`) and this one both take over the walker.
 
 ## Testing in game

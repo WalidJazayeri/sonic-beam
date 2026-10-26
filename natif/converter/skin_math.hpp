@@ -65,6 +65,7 @@ struct RigClip {
     uint32_t first = 0, frames = 0;   // range on the concatenated timeline
     bool loop = false;
     float ref_kmh = 0, min_rate = 1, max_rate = 1;
+    std::vector<float> steps;         // toe-down phases in 0..1 of the cycle (walk, run), ascending
     // Diagnostics
     uint32_t source_frames = 0;
     float seam = 0, max_scale = 0, max_shear = 0, check = 0, root_motion = 0, min_det = 1;
@@ -87,6 +88,7 @@ struct ClipSource {
     std::string name;
     bool loop = false;
     float ref_kmh = 0, min_rate = 1, max_rate = 1;
+    std::vector<float> steps;
     frontiers::Clip clip;
 };
 
@@ -248,6 +250,7 @@ inline bool build_animation(const frontiers::Model &model, const std::vector<Cli
     for (auto &c : clips) {
         RigClip out;
         out.name = c.name; out.loop = c.loop; out.ref_kmh = c.ref_kmh; out.min_rate = c.min_rate; out.max_rate = c.max_rate;
+        out.steps = c.steps;
         out.first = first; out.source_frames = c.clip.frames;
         out.frames = c.loop && c.clip.frames > 2 ? c.clip.frames - 1 : c.clip.frames;
         if (c.loop) out.seam = max_diff(c.clip.frame(0), c.clip.frame(c.clip.frames - 1), int(n * 12));

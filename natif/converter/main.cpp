@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // sonicnative_convert: turns Sonic from the player's own Sonic Frontiers install into a skinned,
-// animated COLLADA shape, BeamNG materials and DDS textures inside the BeamNG user folder
+// animated COLLADA shape, BeamNG materials, DDS textures and WAV sounds inside the BeamNG user folder
 // (<userpath>\current\mods\sonicnative_data). Nothing it writes belongs in the repository or a package.
 #include <algorithm>
 #include <cstdio>
@@ -18,6 +18,7 @@
 #include "dds_patch.hpp"
 #include "frontiers_material.hpp"
 #include "fixture.hpp"
+#include "sounds.hpp"
 #include <tlhelp32.h>   // after windows.h (text.hpp)
 
 #ifndef SONICNATIVE_VERSION
@@ -38,7 +39,7 @@ struct Options {
     std::wstring userpath, frontiers;
     std::string clips = sonic_data::kDefaultClips;
     Split split = Split::clips;
-    bool fixture = false, bind_only = false, flip_green = false, srgb = true, flat = false, uv_clamp = true;
+    bool fixture = false, bind_only = false, flip_green = false, srgb = true, flat = false, uv_clamp = true, sounds = true;
 };
 
 void usage()
@@ -46,7 +47,7 @@ void usage()
     std::printf("sonicnative_convert %s\n"
                 "usage: sonicnative_convert --userpath <BeamNG user folder> [--frontiers <Sonic Frontiers folder>]\n"
                 "                           [--clips %s] [--split clips|cs] [--bind-only] [--flat] [--flip-green] [--no-srgb]\n"
-                "                           [--no-uv-clamp] [--fixture]\n"
+                "                           [--no-uv-clamp] [--no-sounds] [--fixture]\n"
                 "  --userpath    the folder BeamNG runs with (-userpath); output goes to <it>\\current\\mods\\%s\n"
                 "  --frontiers   default: frontiers= line of %%LOCALAPPDATA%%\\SonicBeam\\settings.ini\n"
                 "  --clips       clip ids (", kVersion, sonic_data::kDefaultClips, kDataFolder);
@@ -58,7 +59,8 @@ void usage()
                 "  --flip-green  invert the green channel of the BC5 normal maps (lossless)\n"
                 "  --no-srgb     keep the albedo headers as they are (UNORM)\n"
                 "  --no-uv-clamp keep UVs outside [0,1] on clamp-addressed textures (eyes) as they are\n"
-                "  --fixture     synthetic 2-joint test shape (clips idle, lean) into %s\\fixture, no Frontiers data\n", kDataFolder);
+                "  --no-sounds   leave Sonic's sounds out (default: every waveform of his sound cues as WAV into %s\\sounds)\n"
+                "  --fixture     synthetic 2-joint test shape (clips idle, lean) into %s\\fixture, no Frontiers data, no sounds\n", kDataFolder, kDataFolder);
 }
 
 bool beamng_running()
@@ -149,9 +151,12 @@ struct Package {
     std::vector<TextureOut> textures;
     float model_height = 1;
     Rig rig;
+    bool with_sounds = false;        // the sounds step ran: sounds/ is rewritten and the manifest lists it
+    std::vector<SoundOut> sounds;
 };
 
 std::string vfs(const Package &p, const std::string &file) { return std::string("/mods/") + kDataFolder + "/" + p.folder + "/" + file; }
+std::string sounds_vfs() { return std::string("/mods/") + kDataFolder + "/sounds/"; }
 
 std::string material_json(const std::string &name, const std::string &stage, bool double_sided)
 {
@@ -219,14 +224,20 @@ std::string manifest_json(const Package &p, const Options &o, const std::string 
         for (size_t i = 0; i < rig.clips.size(); ++i) {
             const RigClip &c = rig.clips[i];
             s += i ? ",\n    " : "\n    ";
+            std::string steps;
+            for (float at : c.steps) steps += (steps.empty() ? "" : ", ") + json_num(at);
             s += "{\"name\": " + json_escape(c.name) + ", \"frames\": " + std::to_string(c.frames) + ", \"fps\": " + json_num(rig.fps) +
                  ", \"loop\": " + (c.loop ? "true" : "false") + ", \"refKmh\": " + json_num(c.ref_kmh) + ", \"minRate\": " + json_num(c.min_rate) +
                  ", \"maxRate\": " + json_num(c.max_rate) + ", \"first\": " + std::to_string(c.first) +
-                 ", \"seqSeconds\": " + json_num((c.frames - 1) / rig.fps) + ", \"loopSeconds\": " + json_num((c.loop ? c.frames : c.frames - 1) / rig.fps) + "}";
+                 ", \"seqSeconds\": " + json_num((c.frames - 1) / rig.fps) + ", \"loopSeconds\": " + json_num((c.loop ? c.frames : c.frames - 1) / rig.fps) +
+                 ", \"steps\": [" + steps + "]}";
         }
         if (!rig.clips.empty()) s += "\n  ";
     }
-    s += "]\n}\n";
+    s += "]";
+    // Sounds: random = one file per play, layers = all files together; a loop loops each whole file.
+    if (p.with_sounds) s += ",\n  \"sounds\": " + sounds_json(p.sounds, sounds_vfs());
+    s += "\n}\n";
     return s;
 }
 
@@ -258,13 +269,16 @@ bool write_package(const fs::path &user, const Package &p, const Options &o, con
     // (the mod then asks for a conversion), never one naming files the cleanup removed.
     if (!fs::remove(manifest, ec) && ec) { std::printf("error: cannot remove %s: %s\n", narrow(manifest.wstring()).c_str(), ec.message().c_str()); return false; }
     // Stale shapes and caches next: BeamNG may prefer an old .cdae to a new .dae.
+    const fs::path sounds = data / L"sounds";
     const size_t stale = remove_stale(dir, widen(p.stem + "_"), {L".dae", L".cdae", L".cs"}) +
                          remove_stale(dir / L"tex", L"sonicnative_", {L".dds"});
+    const size_t stale_sounds = p.with_sounds ? remove_stale(sounds, L"", {L".wav"}) : 0;   // the sounds folder is ours
     const bool had_cache = fs::exists(cache, ec);
     fs::remove_all(cache, ec);
     if (ec) { std::printf("error: cannot remove %s: %s\n", narrow(cache.wstring()).c_str(), ec.message().c_str()); return false; }
-    std::printf("cleanup: %zu stale file(s) removed from %s; cache %s %s\n", stale, narrow(dir.wstring()).c_str(),
-                narrow(cache.wstring()).c_str(), had_cache ? "removed" : "absent");
+    std::printf("cleanup: %zu stale file(s) removed from %s", stale, narrow(dir.wstring()).c_str());
+    if (p.with_sounds) std::printf(", %zu from %s", stale_sounds, narrow(sounds.wstring()).c_str());
+    std::printf("; cache %s %s\n", narrow(cache.wstring()).c_str(), had_cache ? "removed" : "absent");
     fs::create_directories(p.textures.empty() ? dir : dir / L"tex", ec);
     if (ec) { std::printf("error: cannot create %s: %s\n", narrow(dir.wstring()).c_str(), ec.message().c_str()); return false; }
 
@@ -294,11 +308,52 @@ bool write_package(const fs::path &user, const Package &p, const Options &o, con
         if (!write_file(path.wstring(), t.bytes.data(), t.bytes.size())) { std::printf("error: cannot write %s\n", narrow(path.wstring()).c_str()); return false; }
         std::printf("wrote %s (%zu bytes)\n", narrow(path.wstring()).c_str(), t.bytes.size());
     }
+    if (p.with_sounds) {
+        fs::create_directories(sounds, ec);
+        if (ec) { std::printf("error: cannot create %s: %s\n", narrow(sounds.wstring()).c_str(), ec.message().c_str()); return false; }
+        size_t files = 0, bytes = 0;
+        for (auto &s : p.sounds)
+            for (auto &f : s.files) {
+                const fs::path path = sounds / widen(f.file);
+                if (!write_file(path.wstring(), f.bytes.data(), f.bytes.size())) { std::printf("error: cannot write %s\n", narrow(path.wstring()).c_str()); return false; }
+                ++files; bytes += f.bytes.size();
+            }
+        std::printf("wrote %zu sound files into %s (%zu bytes)\n", files, narrow(sounds.wstring()).c_str(), bytes);
+    }
     // Manifest last: it only ever names files this run wrote.
     const std::string m = manifest_json(p, o, hash, dae_file);
     if (!write_file(manifest.wstring(), m)) { std::printf("error: cannot write %s\n", narrow(manifest.wstring()).c_str()); return false; }
     std::printf("wrote %s (%zu bytes)\n", narrow(manifest.wstring()).c_str(), m.size());
     return true;
+}
+
+// Footsteps of a looping clip, as the overlay finds them (beamng/src/assets.cpp footsteps): a toe's model-space
+// height comes down through the bottom fifth of its range. Phase f / (frames - 1) is key f of the kept cycle,
+// the same position in Torque's cyclic sequence (n keys over 0..1) and in Frontiers' loop.
+std::vector<float> step_phases(const frontiers::Model &model, const frontiers::Clip &clip)
+{
+    std::vector<float> out;
+    if (clip.frames < 4 || clip.nodes != model.nodes.size()) return out;
+    const uint32_t loop = clip.frames - 1;
+    for (const char *name : sonic_data::kToes) {
+        int toe = -1;
+        for (size_t n = 0; n < model.nodes.size(); ++n) if (model.nodes[n].name == name) toe = int(n);
+        float bind[16];
+        if (toe < 0 || !frontiers::math4::inverse_affine(model.nodes[size_t(toe)].inverse_bind, bind)) { std::printf("    warning: no joint %s for footsteps\n", name); continue; }
+        const float bx = bind[3], by = bind[7], bz = bind[11];
+        std::vector<float> y(clip.frames);
+        for (uint32_t f = 0; f < clip.frames; ++f) {
+            const float *s = clip.frame(f) + size_t(toe) * 12;
+            y[f] = s[4] * bx + s[5] * by + s[6] * bz + s[7];
+        }
+        const float lo = *std::min_element(y.begin(), y.end()), hi = *std::max_element(y.begin(), y.end());
+        if (hi - lo < 1e-3f) continue;
+        const float threshold = lo + sonic_data::kStepThreshold * (hi - lo);
+        for (uint32_t f = 0; f < loop; ++f)
+            if (y[f] <= threshold && y[(f + loop - 1) % loop] > threshold) out.push_back(float(f) / loop);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 // Sonic from the player's install.
@@ -422,6 +477,13 @@ bool prepare_sonic(const Options &o, Package &p, std::string &hash_input)
         const frontiers::PacEntry *entry = pac.find(row->clip);
         if (!entry || !frontiers::bake_clip(*entry, skeleton, model, c.clip, error)) { std::printf("error: clip %s: %s\n", row->clip, entry ? error.c_str() : "missing"); return false; }
         std::printf("  clip %-10s %-34s %3u frames @ %.0f fps (%.3f s)\n", c.name.c_str(), row->clip, c.clip.frames, c.clip.rate, c.clip.duration);
+        for (const char *s : sonic_data::kStepClips) {
+            if (c.name != s || !c.loop) continue;
+            c.steps = step_phases(model, c.clip);
+            std::printf("    footsteps at");
+            for (float at : c.steps) std::printf(" %.3f", at);
+            std::printf("%s of the cycle\n", c.steps.empty() ? " none" : "");
+        }
         clips.push_back(std::move(c));
     }
     if (clips.empty()) { std::printf("error: no clips (use --bind-only for a bind pose)\n"); return false; }
@@ -470,6 +532,7 @@ int wmain(int argc, wchar_t **argv)
         else if (a == L"--flat") o.flat = true;
         else if (a == L"--no-srgb") o.srgb = false;
         else if (a == L"--no-uv-clamp") o.uv_clamp = false;
+        else if (a == L"--no-sounds") o.sounds = false;
         else if (a == L"--help" || a == L"-h" || a == L"/?") { usage(); return 0; }
         else { std::printf("error: unknown argument '%s'\n", narrow(a).c_str()); usage(); return 2; }
     }
@@ -506,6 +569,12 @@ int wmain(int argc, wchar_t **argv)
         p.materials_file = "sonicnative.materials.json"; p.datablocks_file = "sonicnative.datablocks.json";
         p.datablock = "sonicnative_db";
         if (!prepare_sonic(o, p, hash_input)) return 1;
+        // Sounds never touch the shape: the hash stays the same with or without them.
+        if (o.sounds) {
+            std::printf("sounds from %s\n", narrow(o.frontiers + L"\\" + sonic_data::kSoundFolder).c_str());
+            p.with_sounds = true;
+            prepare_sounds(o.frontiers, p.sounds);
+        }
     }
     hash_input += std::string("|clips=") + (o.fixture ? "idle,lean" : o.clips) + "|split=" + split_name(o.bind_only ? Split::bind : o.split) +
                   "|flip=" + (o.flip_green ? "1" : "0") + "|srgb=" + (o.srgb ? "1" : "0") + "|flat=" + (o.flat ? "1" : "0") +

@@ -24,9 +24,9 @@ $luaGlobals = @(
   'clamp','deepcopy','dumps','extensions','jsonDecode','jsonEncode','jsonReadFile','jsonWriteFile','log','M',
   'quat','quatFromDir','serialize','setExtensionUnloadMode','vec3',
   # BeamNG game engine (GE) Lua
-  'be','castRayStatic','core_camera','core_gamestate','createObject','FS','gameplay_missions_missionManager',
-  'gameplay_walk','getAllVehicles','getPlayerVehicle','guihooks','loadJsonMaterialsFile','scenetree','spawn',
-  'TorqueScript','ui_imgui','ui_message',
+  'be','castRayStatic','core_camera','core_gamestate','createObject','Engine','FS','gameplay_missions_missionManager',
+  'gameplay_walk','getAllVehicles','getPlayerVehicle','guihooks','loadJsonMaterialsFile','scenetree','simTimeAuthority',
+  'spawn','TorqueScript','ui_imgui','ui_message',
   # BeamNG vehicle Lua
   'controller','electrics','enablePhysicsStepHook','input','MoveManager','obj','sensors','v'
 )
@@ -69,10 +69,19 @@ if ($Install) {
     }
     $unpacked = Join-Path $userFolder 'mods\unpacked'
     $target = Join-Path $unpacked 'sonicnative'
-    # a mirror: the old copy goes first, so files removed from natif\mod do not linger
-    if (Test-Path $target) { Remove-Item -Recurse -Force $target }
-    New-Item -ItemType Directory -Force $unpacked | Out-Null
-    Copy-Item -Recurse (Join-Path $root 'mod') $target
+    # a mirror updated in place: files still in natif\mod are overwritten, never deleted first. A running
+    # game watches the folder; a camera mode deleted even for a moment makes core/camera.lua rebuild its
+    # camera list without it, and Sonic's camera stays active but frozen until the next file change
+    $source = Join-Path $root 'mod'
+    New-Item -ItemType Directory -Force $target | Out-Null
+    foreach ($file in Get-ChildItem -Recurse -File $source) {
+        $dest = Join-Path $target $file.FullName.Substring($source.Length + 1)
+        New-Item -ItemType Directory -Force (Split-Path -Parent $dest) | Out-Null
+        Copy-Item -Force $file.FullName $dest
+    }
+    foreach ($file in Get-ChildItem -Recurse -File $target) {
+        if (-not (Test-Path (Join-Path $source $file.FullName.Substring($target.Length + 1)))) { Remove-Item -Force $file.FullName }
+    }
     $count = @(Get-ChildItem -Recurse -File $target).Count
     Write-Output ("installed {0} ({1} files)" -f $target, $count)
 }

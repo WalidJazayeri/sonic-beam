@@ -100,6 +100,13 @@ local function readManifest()
       -- Torque plays a clip of n keys over (n-1)/fps, which the converter writes as seqSeconds
       local seconds = tonumber(c.seqSeconds) or tonumber(c.duration) or (frames - 1) / fps
       c.seconds = math.max(1 / 30, seconds)
+      -- toe-down phases (0..1 of the cycle) the converter found for the footsteps; {} for none
+      local steps = {}
+      for _, p in ipairs(type(c.steps) == 'table' and c.steps or {}) do
+        p = tonumber(p)
+        if p and p == p then steps[#steps + 1] = p % 1 end
+      end
+      c.steps = steps
       clipsByName[c.name] = c
       keys = keys + frames
     end
@@ -392,9 +399,12 @@ local function update(dt)
     if name ~= clip then rate = rateFor(clip, speedKmh) end   -- held: the current clip at its own rate
     setRate(o, rate)
   end
-  if driveMode == 'manual' and playing then
-    clipPhase = (clipPhase + dt * clipRate / clipSeconds(playing)) % 1
-    o:setThreadPosition(0, clipPhase)
+  -- the clip's phase (0..1): Lua sets it in manual mode; in engine mode it is an estimate for the
+  -- footsteps (M.getAnim), advanced at the scale the engine was given and reset by playClip
+  if playing then
+    local r = driveMode == 'engine' and appliedScale or clipRate
+    clipPhase = (clipPhase + dt * r / clipSeconds(playing)) % 1
+    if driveMode == 'manual' then o:setThreadPosition(0, clipPhase) end
   end
 end
 
@@ -470,6 +480,19 @@ M.status = function()
     materialsOk = materialsOk, missingMaterials = missingMaterials, missingClips = missing,
     cache = cache, lastError = lastError,
   }
+end
+
+-- For the sounds (sonicnative_sound): the sequence playing, its phase (0..1, estimated in engine
+-- mode), its rate and its footstep phases from the manifest. The same table every call: read it,
+-- do not keep it.
+local NO_STEPS = {}
+local anim = {clip = nil, phase = 0, rate = 1, steps = NO_STEPS, shown = false}
+M.getAnim = function()
+  local c = playing and clipsByName[playing]
+  anim.clip, anim.phase, anim.shown = playing, clipPhase, rendered
+  anim.rate = driveMode == 'engine' and appliedScale or clipRate
+  anim.steps = c and c.steps or NO_STEPS
+  return anim
 end
 
 -- forces a clip (name) at a rate, or gives the choice back to Sonic's speed (nil)

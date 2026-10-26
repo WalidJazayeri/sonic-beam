@@ -5,6 +5,15 @@ Le mode natif (dossier `natif/`) a ses propres versions : le numéro est dans `n
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## natif-v0.2.0
+- Sons de Sonic par l'audio de BeamNG : pas selon le sol (béton, terre, herbe, sable, neige, eau, métal), atterrissage selon le sol, saut, boost (départ puis souffle en boucle tant qu'il boost), freinage, vent qui monte avec la vitesse, bang supersonique (boost relancé au-dessus de 200 km/h, choc contre une voiture au-dessus de 120 km/h). Les règles et les volumes sont ceux du mode superposé. Les sons suivent Sonic, même en boost.
+- Plus riche que le superposé : toutes les variantes de Frontiers sont jouées au hasard (jusqu'à 12 bruits de pas différents sur la terre, au lieu d'un seul), et toutes les couches des sons à plusieurs couches (boost, saut, bang).
+- Le convertisseur extrait ces sons de la banque de Frontiers du joueur en WAV (`mods/sonicnative_data/sounds`, 121 fichiers, 10 Mo) et calcule le moment où chaque pied touche le sol dans les animations de marche et de course. Les sons en boucle sont coupés à la boucle de Frontiers, avec un fondu de 20 ms à la jonction (sans lui, le souffle du boost faisait un petit clic à chaque tour).
+- La détection du sol sous les pieds de Sonic, retirée en 0.1.0, revient (la même que le superposé).
+- Sons coupés en pause et quand Sonic n'est pas à pied.
+- `natif/build.ps1 -Install` met le mod à jour sur place au lieu de supprimer puis recopier son dossier : avec le jeu ouvert, BeamNG perdait la caméra de Sonic (image figée, commandes inversées).
+- À savoir : le bang supersonique suit Sonic au lieu de rester sur place (les sons du mod sont accrochés à son corps).
+
 ## natif-v0.1.0
 - Premier prototype du mode natif, sans DLL : Sonic est un vrai objet de la scène de BeamNG (un StaticShape), éclairé par le jeu et caché par ce qui passe devant lui. Il ne projette pas encore d'ombre.
 - Un convertisseur lit Sonic dans le Sonic Frontiers du joueur (modèle, squelette, animations de repos, de marche, de course, de boost et de chute, textures) et écrit un modèle COLLADA animé, ses matériaux et ses textures dans le dossier utilisateur de BeamNG (`mods/sonicnative_data`). Rien de Frontiers n'est dans le dépôt ni dans le mod.

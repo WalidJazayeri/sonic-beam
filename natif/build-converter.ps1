@@ -12,12 +12,17 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version '$Version' is not maj
 $out = Join-Path $root 'build'
 New-Item -ItemType Directory -Force $out | Out-Null
 
+# clHCA (sounds) is C, not C++: compiled on its own like beamng/build.ps1 does, then linked
+$clhca = Join-Path $out 'clhca.o'
+& $zig cc -target x86_64-windows-gnu -O2 -c (Join-Path $repo 'src\third_party\clhca\clhca.c') -o $clhca
+if ($LASTEXITCODE -ne 0) { throw 'clHCA compilation failed' }
+
 $sources = @((Join-Path $root 'converter\main.cpp'), (Join-Path $repo 'src\frontiers\anim_acl.cpp'))
 $exe = Join-Path $out 'sonicnative_convert.exe'
 $log = Join-Path $out 'convert-compile.log'
 & $zig c++ -target x86_64-windows-gnu -std=c++17 -O2 -municode -fno-sanitize=undefined `
     -Wno-missing-template-arg-list-after-template-kw -Wno-unused-command-line-argument `
-    "-DSONICNATIVE_VERSION=$Version" -I $acl @sources -o $exe 2>&1 | Out-File -Encoding utf8 $log
+    "-DSONICNATIVE_VERSION=$Version" -I $acl @sources $clhca -o $exe 2>&1 | Out-File -Encoding utf8 $log
 if ($LASTEXITCODE -ne 0) { Get-Content $log | Select-String 'error' | Select-Object -First 40 | ForEach-Object Line; throw 'Converter compilation failed' }
 Get-Content $log | Select-String 'warning' | Select-Object -First 20 | ForEach-Object Line
 Write-Output ("built {0} ({1} bytes)" -f $exe, (Get-Item $exe).Length)

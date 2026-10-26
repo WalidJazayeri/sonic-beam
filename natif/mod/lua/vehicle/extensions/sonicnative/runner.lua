@@ -3,13 +3,17 @@
 -- Sonic's running speed, boost and jump (sonicnative/config.lua). Reads BeamNG's own walking
 -- inputs: W A S D move, Shift (sprint) is the boost, Space jumps. Holding boost keeps adding
 -- speed, up to the top speed while the limit is on. Same physics as the overlay's runner
--- (beamng/mod/lua/vehicle/extensions, runner.lua, v0.12.3).
+-- (beamng/mod/lua/vehicle/extensions, runner.lua, v0.12.3); like it, it also tells the game engine
+-- side the ground under the ball (config.ground) for Sonic's footstep and landing sounds.
 
 local M = {}
 
 local config = require('sonicnative/config')
 local P = config.physics
 local S = config.settings
+local G = config.ground
+local groundIndex = {}            -- ground key -> 0..6, for the relay's packed number
+for i, k in ipairs(G.keys) do groundIndex[k] = i - 1 end
 
 local walkX, walkY = 0, 0
 local boostHeld = 0
@@ -25,6 +29,11 @@ local totalMass = 0
 local massNodes = {}           -- {cid, weight}: every node, so Sonic's push moves the body like gravity does
 local ballNodes = {}
 local ballFriction = {}        -- cid -> {static, sliding} from the jbeam, restored after a glide
+local ballNodeSet = {}         -- cid -> true
+local groundMaterial = nil     -- BeamNG ground material id under the ball (nodeCollision), kept in the air
+local CLOTH = 8                -- the ball's own material (id of CLOTH in the game's lua/common/particles.json)
+local materialNames = nil      -- material id -> name (the game's particles module)
+local loggedMaterial = nil
 local gliding = false
 local groundGap = math.huge    -- metres from the ball's bottom down to the ground (updateGFX)
 local snapLock = 0             -- seconds left without ground snap (after a jump)
@@ -80,11 +89,13 @@ local function wrapPlayerController()
   local o = pc.sonicnativeOriginal
   if not o then
     o = {}
-    for _, k in ipairs({'walkUpDownRaw', 'walkLeftRightRaw', 'walkUpDown', 'walkLeftRight', 'setSpeedCoef', 'toggleSpeedCoef', 'jump', 'setCameraControlData'}) do
+    for _, k in ipairs({'walkUpDownRaw', 'walkLeftRightRaw', 'walkUpDown', 'walkLeftRight', 'setSpeedCoef', 'toggleSpeedCoef', 'jump', 'setCameraControlData', 'nodeCollision'}) do
       o[k] = pc[k]
     end
     pc.sonicnativeOriginal = o
   end
+  -- kept by a runner before the ground sounds, which never wrapped it: still BeamNG's own
+  if o.nodeCollision == nil then o.nodeCollision = pc.nodeCollision end
   -- while gliding the walking controller gets no stick input, so it locks the ball (see setGlide)
   pc.walkUpDownRaw = function(v) walkY = v; if not gliding then return o.walkUpDownRaw(v) end end
   pc.walkLeftRightRaw = function(v) walkX = v; if not gliding then return o.walkLeftRightRaw(v) end end
@@ -116,6 +127,16 @@ local function wrapPlayerController()
   end
   walkerSpeedCoef = o.setSpeedCoef
   original = o
+  -- the ground the ball touches, for Frontiers' footstep and landing sounds (as the overlay's runner,
+  -- which took materialID1 only: its log showed the ball's own CLOTH there now and then, between DIRT)
+  pc.nodeCollision = function(p)
+    if ballNodeSet[p.id1] then
+      local m = p.materialID1
+      if m == CLOTH then m = p.materialID2 end
+      if m ~= CLOTH then groundMaterial = m end
+    end
+    if o.nodeCollision then return o.nodeCollision(p) end
+  end
   controller.cacheAllControllerFunctions()
   wrapped = true
   return true
@@ -136,6 +157,7 @@ local function findNodes()
     if node.name then byName[node.name] = node.cid end
     if node.tag == 'ball' then
       ballNodes[#ballNodes + 1] = node.cid
+      ballNodeSet[node.cid] = true
       if node.frictionCoef then ballFriction[node.cid] = {node.frictionCoef, node.slidingFrictionCoef or node.frictionCoef} end
     end
   end
@@ -427,6 +449,25 @@ wallStep = function(dt, vel)
   end
 end
 
+-- the ground key ('conc', 'dirt', ...) of the last material the ball touched (as the overlay's runner
+-- surfaceIndex: the material's name in the game's particles module, then config.ground)
+local function groundKey()
+  if not groundMaterial then return 'conc' end
+  if not materialNames then
+    materialNames = {}
+    local ok, particles = pcall(require, 'particles')
+    if ok and type(particles) == 'table' and particles.getMaterialsParticlesTable then
+      for id, m in pairs(particles.getMaterialsParticlesTable() or {}) do materialNames[id] = m.name end
+    end
+  end
+  local name = materialNames[groundMaterial]
+  if loggedMaterial ~= groundMaterial then
+    loggedMaterial = groundMaterial
+    log('D', 'sonicnative', 'ground material ' .. tostring(groundMaterial) .. ' = ' .. tostring(name))
+  end
+  return G.materials[name or ''] or 'conc'
+end
+
 local function updateGFX(dt)
   if not wrapped then wrapPlayerController() end
   if not enabled then return end
@@ -495,12 +536,15 @@ local function updateGFX(dt)
   local onGround = grounded and 1 or 0
   local wantsMove = amount > 0.1 and 1 or 0
   local wall = wallApproach and 0 or wallState   -- running at the wall is still running
-  local key = boosting + 2 * onGround + 4 * wantsMove + 8 * airInput + 32 * waterState + 128 * wall
+  -- the ground under him, for the footstep and landing sounds: on the water it is the water
+  local ground = waterState ~= 0 and 'watr' or groundKey()
+  debugInfo.ground, debugInfo.material = ground, groundMaterial or -1
+  local key = boosting + 2 * onGround + 4 * wantsMove + 8 * airInput + 32 * waterState + 128 * wall + 512 * (groundIndex[ground] or 0)
   relayTimer = relayTimer - dt
   if key ~= relayKey or jumpsToReport > 0 or relayTimer <= 0 then
     relayKey, relayTimer = key, 1 / config.relay.hz
-    obj:queueGameEngineLua(string.format('if sonicnative_body then sonicnative_body.onRunner(%d, %d, %d, %d, %d, %d, %d, %.3f, %.3f, %.3f) end',
-      boosting, jumpsToReport, onGround, wantsMove, airInput, waterState, wall, wallN.x, wallN.y, wallN.z))
+    obj:queueGameEngineLua(string.format("if sonicnative_body then sonicnative_body.onRunner(%d, %d, %d, %d, %d, %d, %d, %.3f, %.3f, %.3f, '%s') end",
+      boosting, jumpsToReport, onGround, wantsMove, airInput, waterState, wall, wallN.x, wallN.y, wallN.z, ground))
     jumpsToReport = 0
   end
 end

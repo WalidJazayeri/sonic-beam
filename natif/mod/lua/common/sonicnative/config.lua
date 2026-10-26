@@ -89,4 +89,21 @@ M.relay = {
   hz = 20,
 }
 
+-- The ground under Sonic, for his footstep and landing sounds: BeamNG's ground material (its name in
+-- the game's lua/common/particles.json) -> Frontiers' ground key. Copied from the overlay's runner.lua
+-- (beamng/mod/lua/vehicle/extensions, SURFACE, v0.12.3: 0 conc ... 6 mtlp); any other material is concrete.
+M.ground = {
+  keys = {'conc', 'dirt', 'gras', 'sand', 'snow', 'watr', 'mtlp'},   -- in the overlay's order (0..6)
+  materials = {
+    ASPHALT = 'conc', ASPHALT_WET = 'conc', ROCK = 'conc', COBBLESTONE = 'conc', RUMBLE_STRIP = 'conc', SLIPPERY = 'conc',
+    ICE = 'conc', WOOD = 'conc', GLASS = 'conc', PLASTIC = 'conc', RUBBER = 'conc',
+    DIRT = 'dirt', DIRT_DUSTY = 'dirt', GRAVEL = 'dirt', MUD = 'dirt',
+    GRASS = 'gras', FOLIAGE = 'gras', FOLIAGE_THIN = 'gras',
+    SAND = 'sand', SANDY_ROAD = 'sand',
+    SNOW = 'snow',
+    WATER = 'watr',
+    METAL = 'mtlp',
+  },
+}
+
 return M

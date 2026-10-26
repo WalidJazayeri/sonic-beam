@@ -5,7 +5,8 @@
 -- through nearby vehicles (vehicle extension sonicnative_impact) and puts the camera behind him
 -- (camera mode sonicnativeChase). It draws nothing: the visual module reads M.getState() and
 -- M.getBody(). Same behaviour as the overlay's GE extension (beamng/mod/lua/ge/extensions,
--- sonic.lua, v0.12.3) without its renderer link, rings, menus, settings file and sounds.
+-- sonic.lua, v0.12.3) without its renderer link, rings, menus, settings file and sounds. It also
+-- loads the body's sound player (vehicle extension sonicnative_sfx) for whoever plays Sonic's sounds.
 
 local M = {}
 local logTag = 'sonicnative'
@@ -28,7 +29,9 @@ local clock = 0
 local bodyFeet, bodyVel = nil, vec3()
 local groundedByRay = false
 -- what the runner inside the walking body last told us (onRunner)
-local runner = {boost = 0, grounded = 0, wantsMove = 0, airInput = 0, water = 0, wall = 0, wallN = vec3(0, 0, 1), jumps = 0}
+local runner = {boost = 0, grounded = 0, wantsMove = 0, airInput = 0, water = 0, wall = 0, wallN = vec3(0, 0, 1), jumps = 0, surface = 'conc'}
+local groundKeys = {}             -- the ground keys the runner may send (config.ground)
+for _, k in ipairs(config.ground.keys) do groundKeys[k] = true end
 local carMass = {}                -- vehicle id -> kg (reported by the vehicle's sonicnative_impact)
 local impactLoaded = {}           -- vehicle id -> the impact extension was loaded into it
 local impactCooldown = {}         -- vehicle id -> clock before it can be hit again
@@ -37,14 +40,15 @@ local lastHit = nil               -- the last hit, for developer checks (M.getLa
 local waterObjects = nil          -- the map's WaterBlocks and WaterPlanes (found once per map)
 local sentWaterZ = false          -- last water height sent to the body
 -- for the visual module: the same table on every M.getState() call, refreshed each frame
-local state = {active = false, boosting = false, airborne = false, speedKmh = 0, onWater = false, onWall = false,
-  water = 0, wall = 0, wallNormal = vec3(0, 0, 1), wantsMove = false, airInput = 0, jumps = 0}
+local state = {active = false, boosting = false, airborne = false, grounded = false, speedKmh = 0, onWater = false, onWall = false,
+  water = 0, wall = 0, wallNormal = vec3(0, 0, 1), wantsMove = false, airInput = 0, jumps = 0, surface = 'conc'}
 
 local down = vec3(0, 0, -1)
 
 local function resetRunner()
   runner.boost, runner.grounded, runner.wantsMove, runner.airInput, runner.water, runner.wall = 0, 0, 0, 0, 0, 0
   runner.wallN = vec3(0, 0, 1)
+  runner.surface = 'conc'
 end
 
 -- the water surface at x, y: WaterBlocks cover their box (their surface is at their position's
@@ -230,7 +234,7 @@ end
 local function releaseBody()
   if sonicBodyId then
     local body = be:getObjectByID(sonicBodyId)
-    if body then body:queueLuaCommand('if sonicnative_runner then sonicnative_runner.setEnabled(false) end') end
+    if body then body:queueLuaCommand('if sonicnative_runner then sonicnative_runner.setEnabled(false) end if sonicnative_sfx then sonicnative_sfx.stopAll() end') end
     log('I', logTag, 'walking body handed back to BeamNG')
   end
   sonicBodyId, runnerLoadedFor, settingsSent = nil, nil, nil
@@ -242,7 +246,9 @@ local function updateState(onFoot)
   s.active = onFoot
   s.speedKmh = math.sqrt(bodyVel.x * bodyVel.x + bodyVel.y * bodyVel.y) * 3.6
   s.boosting = onFoot and runner.boost == 1
-  s.airborne = onFoot and not (runner.grounded == 1 or groundedByRay)
+  -- on the ground, a wall or running on the water (the runner), or the ground within reach (ray)
+  s.grounded = onFoot and (runner.grounded == 1 or groundedByRay)
+  s.airborne = onFoot and not s.grounded
   s.water = onFoot and runner.water or 0          -- 1 running on the water, 2 swimming
   s.wall = onFoot and runner.wall or 0            -- 1 up the wall, 2/3 along it (wall on his left/right)
   s.onWater = s.water ~= 0
@@ -251,14 +257,18 @@ local function updateState(onFoot)
   s.wantsMove = onFoot and runner.wantsMove == 1  -- stick pushed
   s.airInput = onFoot and runner.airInput or 0    -- direction held in the air: 1 left, 2 right, 3 back
   s.jumps = runner.jumps                          -- jumps since the extension loaded: a change is a new jump
+  -- ground under him for the footstep and landing sounds ('conc', 'dirt', 'gras', 'sand', 'snow',
+  -- 'watr', 'mtlp'): the last one the ball touched, kept in the air; the water while on it
+  s.surface = onFoot and runner.surface or 'conc'
 end
 
 -- called by the runner inside the walking body when its state changes, and a few times a second
-local function onRunner(boost, jumps, grounded, wantsMove, airInput, water, wall, nx, ny, nz)
+local function onRunner(boost, jumps, grounded, wantsMove, airInput, water, wall, nx, ny, nz, surface)
   runner.boost, runner.grounded, runner.wantsMove = boost or 0, grounded or 0, wantsMove or 0
   runner.airInput, runner.water, runner.wall = airInput or 0, water or 0, wall or 0
   runner.wallN = vec3(nx or 0, ny or 0, nz or 1)
   runner.jumps = runner.jumps + (jumps or 0)
+  runner.surface = groundKeys[surface] and surface or 'conc'
 end
 
 local function onPreRender(dtReal)
@@ -290,7 +300,8 @@ local function onPreRender(dtReal)
       sonicBodyId = id
       cameraSetAt = clock
       resetRunner()
-      unicycle:queueLuaCommand("extensions.load('sonicnative_runner') if sonicnative_runner then sonicnative_runner.setEnabled(true) end")
+      -- Sonic's physics, and the player for his sounds (they follow the body)
+      unicycle:queueLuaCommand("extensions.load('sonicnative_runner') extensions.load('sonicnative_sfx') if sonicnative_runner then sonicnative_runner.setEnabled(true) end")
     end
     if settingsSent ~= id then
       settingsSent = id
@@ -367,7 +378,7 @@ M.setCarMass = function(id, kg) carMass[id] = kg end
 M.getLastHit = function() return lastHit end
 -- Sonic's feet and velocity (vec3s; feet is nil until he has been on foot), for the camera and the visual module
 M.getBody = function() return bodyFeet, bodyVel end
--- {active, boosting, airborne, speedKmh, onWater, onWall, ...}: the same table every call, read it, do not keep it
+-- {active, boosting, airborne, grounded, speedKmh, onWater, onWall, surface, ...}: the same table every call, read it, do not keep it
 M.getState = function() return state end
 M.ensureOnFoot = ensureOnFoot
 M.groundBelow = groundBelow

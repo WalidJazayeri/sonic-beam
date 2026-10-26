@@ -15,7 +15,12 @@ namespace frontiers {
 struct Pcm {
     uint32_t rate = 0, channels = 0;
     std::vector<int16_t> samples;      // interleaved
+    uint32_t loop_start = 0, loop_end = 0;   // HCA loop in frames of `samples`, [start, end); end 0: no loop
 };
+
+// One waveform a cue starts: its index in the WaveformTable, when it starts after the cue, and from how many of
+// the cue's tracks (a layered cue may start the same waveform twice at once).
+struct CueVoice { uint32_t waveform = 0; float delay = 0; uint32_t plays = 1; };
 
 class UtfTable {
 public:
@@ -124,7 +129,81 @@ public:
         return false;
     }
 
+    // Every waveform a cue reaches (all random variants, all layers), in table order, each once: reaching one
+    // again only counts in its plays (the first delay stays).
+    // kind: the Type of the cue's sequence (0 layers played together, 1 sequential, 2/3/4 random
+    // picks, as vgmstream reads them), -1 when the cue is not a sequence.
+    bool cue_voices(const std::string &cue, std::vector<CueVoice> &voices, int &kind, std::string &error)
+    {
+        voices.clear();
+        kind = -1;
+        UtfTable names, cues;
+        if (!sub(root_, "CueNameTable", names) || !sub(root_, "CueTable", cues)) { error = "bank without cue tables"; return false; }
+        for (uint32_t r = 0; r < names.rows(); ++r) {
+            if (names.s(r, "CueName") != cue) continue;
+            const uint32_t index = uint32_t(names.u(r, "CueIndex"));
+            if (index >= cues.rows()) break;
+            const uint32_t type = uint32_t(cues.u(index, "ReferenceType")), ref = uint32_t(cues.u(index, "ReferenceIndex"));
+            UtfTable sequence;
+            if (type == 3 && sub(root_, "SequenceTable", sequence) && ref < sequence.rows()) kind = int(sequence.u(ref, "Type"));
+            collect(type, ref, 0, voices, 0);
+            if (voices.empty()) { error = "cue has no waveform"; return false; }
+            return true;
+        }
+        error = "cue not found";
+        return false;
+    }
+
+    bool decode_waveform_at(uint32_t index, Pcm &out, std::string &error) { return decode_waveform(index, out, error); }
+
 private:
+    // follow() that keeps going: every synth item, every track and every note-on. A track's 2001 command
+    // reads as a wait in milliseconds before the next note-on (INFERRED from the data: Sonic's boost
+    // starts its last layer at 1000, the wind its second layer at 3400 or 1182).
+    void collect(uint32_t type, uint32_t index, float delay, std::vector<CueVoice> &voices, int depth)
+    {
+        if (depth > 8) return;
+        if (type == 1) {
+            for (auto &v : voices) if (v.waveform == index) { ++v.plays; return; }
+            voices.push_back({index, delay, 1});
+            return;
+        }
+        if (type == 2) {
+            UtfTable synth;
+            if (!sub(root_, "SynthTable", synth) || index >= synth.rows()) return;
+            const uint8_t *items; size_t size;
+            if (!synth.blob(index, "ReferenceItems", items, size)) return;
+            Bytes b{items, size};
+            for (size_t k = 0; k + 4 <= size; k += 4) collect(b.be16(k), b.be16(k + 2), delay, voices, depth + 1);
+            return;
+        }
+        if (type == 3 || type == 8) {
+            UtfTable sequence, tracks, events;
+            if (!sub(root_, type == 3 ? "SequenceTable" : "BlockSequenceTable", sequence) || index >= sequence.rows()) return;
+            if (!sub(root_, "TrackTable", tracks)) return;
+            if (!sub(root_, "TrackEventTable", events) && !sub(root_, "CommandTable", events)) return;
+            const uint8_t *list; size_t size;
+            if (!sequence.blob(index, "TrackIndex", list, size)) return;
+            Bytes b{list, size};
+            for (size_t k = 0; k + 2 <= size; k += 2) {
+                const uint32_t track = b.be16(k);
+                if (track >= tracks.rows()) continue;
+                const uint32_t event = uint32_t(tracks.u(track, "EventIndex"));
+                const uint8_t *cmd; size_t cmd_size;
+                if (event >= events.rows() || !events.blob(event, "Command", cmd, cmd_size)) continue;
+                Bytes c{cmd, cmd_size};
+                float at = delay;
+                for (size_t p = 0; p + 3 <= cmd_size;) {
+                    const uint16_t code = c.be16(p);
+                    const uint8_t len = c.u8(p + 2);
+                    if ((code == 2000 || code == 2003) && len >= 4) collect(c.be16(p + 3), c.be16(p + 5), at, voices, depth + 1);
+                    if (code == 2001 && len >= 4) at += float(c.be32(p + 3)) / 1000.0f;
+                    p += 3 + len;
+                }
+            }
+        }
+    }
+
     bool sub(UtfTable &parent, const char *column, UtfTable &table)
     {
         const uint8_t *data; size_t size;
@@ -228,6 +307,11 @@ private:
             if (skip < out.samples.size()) out.samples.erase(out.samples.begin(), out.samples.begin() + skip);
             if (keep && keep < out.samples.size()) out.samples.resize(keep);
             if (out.samples.empty()) { error = "HCA decoded to nothing"; ok = false; }
+            // clHCA gives the loop after the encoder delay, the same frames as the trimmed samples
+            if (ok && info.loopEnabled && info.loopEndSample > info.loopStartSample) {
+                out.loop_start = info.loopStartSample;
+                out.loop_end = std::min<uint32_t>(info.loopEndSample, uint32_t(out.samples.size() / info.channelCount));
+            }
         }
         if (hca) clHCA_delete(hca);
         return ok;
