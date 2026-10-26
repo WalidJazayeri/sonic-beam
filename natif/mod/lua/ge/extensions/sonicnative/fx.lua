@@ -127,6 +127,21 @@ local function level(alpha)
   return lo
 end
 
+-- the ladder level for an alpha among every step-th level only (1, 1 + step, ... and the top): each
+-- level drawn is one more part of its mesh, and the engine pays for every part each frame (measured:
+-- about 50 parts in boost, 215 -> 30 fps). dither (0..1) picks between the two nearest, so that over
+-- many quads the brightness keeps its mean; 0: too dim, dropped
+local function steppedLevel(alpha, step, dither)
+  local l = level(alpha)
+  local n = ladder.n
+  if l == 0 or step <= 1 or n < 2 then return l end
+  local a = ladder.a
+  local at = (mlog(alpha) - mlog(a[1])) / (mlog(a[n]) - mlog(a[1])) * (n - 1) / step
+  local below = floor(at)
+  if at - below > dither then below = below + 1 end
+  return max(1, min(n, below * step + 1))
+end
+
 local function validName(s)
   return type(s) == 'string' and s:match('^[%w_]+$') ~= nil
 end
@@ -733,7 +748,7 @@ local spriteCount = 0
 local function sprite(kind, px, py, pz, size, alpha, spin, u0, v0, u1, v1)
   local k = kinds[kind]
   if not (k and k.usable) then return end
-  local lvl = level(alpha)
+  local lvl = steppedLevel(alpha, E.sprites.levelStep, 0.5)
   if lvl == 0 or not k.have[lvl] then return end
   local dx, dy, dz = cam.x - px, cam.y - py, cam.z - pz
   local d = sqrt(dx * dx + dy * dy + dz * dz)
@@ -856,13 +871,6 @@ local function updateTrail(dt, a)
   end
 end
 
-local function trailLevel(alpha)
-  local l = level(alpha)
-  local step = E.trail.levelStep
-  if l > 0 and step > 1 then l = min(ladder.n, floor((l - 1) / step + 0.5) * step + 1) end
-  return l
-end
-
 -- one ribbon: faces the camera, lying flat where it points at it; v scrolls (game.cpp:545-580)
 local function ribbon(kind, width, alpha, u0, u1, jitter, vScale, vSpeed)
   local k = kinds[kind]
@@ -914,7 +922,8 @@ local function ribbon(kind, width, alpha, u0, u1, jitter, vScale, vSpeed)
     local lx, ly, lz, rx, ry, rz = px - wx, py - wy, pz - wz, px + wx, py + wy, pz + wz
     local v = along / vScale - vShift
     if have then
-      local lvl = trailLevel((pa + fade) * 0.5)
+      -- the segment's own dither, from its older point's birth: it keeps it while it fades
+      local lvl = steppedLevel((pa + fade) * 0.5, T.levelStep, (pathB[i] * 7919) % 1)
       if lvl > 0 and k.have[lvl] then
         quad(trailB, partFor(trailB, k.names[lvl]),
           plx, ply, plz, u0, pv, prx, pry, prz, u1, pv, rx, ry, rz, u1, v, lx, ly, lz, u0, v)

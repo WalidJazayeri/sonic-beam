@@ -108,7 +108,11 @@ M.trail = {
   fadePow = 1.5,                  -- game.cpp:563
   -- native only: points kept at most (the spacing grows with the speed past this, then old points are halved)
   maxPoints = 160,
-  levelStep = 1,                  -- native only: the trail's quads use every n-th brightness level (2: half the parts, so fewer draw calls)
+  -- native only: the trail's quads use every n-th brightness level, dithered between the two nearest
+  -- (each level drawn is one more part of the mesh, which the engine pays for every frame). Measured in
+  -- boost on Gridmap V2: all 24 levels 23-26 fps, every 4th 46, every 6th 54, every 8th 62 (199 without
+  -- the effects); 6 looks like 1
+  levelStep = 6,
   beam = {width = 1.3, alpha = 0.75},                 -- x width, x min(1, intensity) (game.cpp:585)
   locus = {vScale = 3, vSpeed = 2.5},                 -- v = along / vScale - now * vSpeed (game.cpp:586)
   arc = {width = 0.6, alpha = 0.9, maxLightning = 1.5, vScale = 2,   -- game.cpp:587
@@ -141,7 +145,8 @@ M.burst = {
 -- native only: sprites are depth tested in BeamNG; each is pulled this far toward the camera (and
 -- scaled to keep its size on screen) so Sonic and the ground do not cut it. To tune in game.
 M.sprites = {cameraPull = {bolt = 0.25, orb = 0.3, glow = 1.5, ring = 1.5},
-  maxCount = 128}                 -- bolts and orbs alive at most (a few dozen at the most in the overlay's numbers)
+  maxCount = 128,                 -- bolts and orbs alive at most (a few dozen at the most in the overlay's numbers)
+  levelStep = 6}                  -- every n-th brightness level only, the nearest (trail.levelStep: fewer parts)
 
 -- native only: the blue light of a boost start, like Frontiers' plight01 (pow_boost_impact)
 M.light = {colour = {0.25, 0.55, 1.0}, radius = 8, peak = 6000, castShadows = false}   -- peak in lumens [not tested]
