@@ -5,7 +5,7 @@
 local M = {}
 
 -- How Sonic's body moves in BeamNG: copied from beamng/sheets/physics.json (every row but
--- unstuckMeters, the overlay's Unstuck button, and the three menu defaults moved to M.settings)
+-- unstuckMeters, in M.unstuck, and the three menu defaults moved to M.settings)
 M.physics = {
   runSpeed = 24,              -- m/s, top running speed without boost
   boostSpeed = 52,            -- m/s, speed at which the camera is fully pulled back (boost look)
@@ -90,6 +90,20 @@ M.settings = {
   -- vehicles: 'mass' Sonic loses speed by the car's mass, 'plow' he keeps it, 'bounce' he bounces off,
   -- 'off' only BeamNG's own collision; impactForce: how heavy he hits; carDamage: how much they crush
   impactMode = 'mass', impactForce = 1, carDamage = 1,
+}
+
+-- Unstuck (O menu button and its key, never automatic): Sonic goes back upright to a spot he
+-- stood on. Copied from the overlay: meters is beamng/sheets/physics.json unstuckMeters, the rest
+-- the numbers of rememberSafeSpot and unstuck in its GE extension (beamng/mod sonic.lua, v0.12.3)
+M.unstuck = {
+  meters = 5,                 -- m, the last spot he stood upright on at least this far from where he is
+  spacing = 2,                -- m, a new spot is kept once he is this far from the last one
+  keep = 30,                  -- spots remembered (the oldest is dropped)
+  uprightZ = 0.9,             -- the body's up vector z from which he counts as upright
+  lift = 0.3,                 -- m, put back this high above the spot
+  -- native only (not in the overlay): a new spot this far from the last one follows a car trip or
+  -- a teleport, so the older spots are dropped (60 m: the teleport threshold of body.lua's checkImpacts)
+  forget = 60,                -- m
 }
 
 -- Native mode only: the runner tells the game engine its state at once when it changes, and

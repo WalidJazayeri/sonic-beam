@@ -5,6 +5,12 @@ Le mode natif (dossier `natif/`) a ses propres versions : le numéro est dans `n
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## natif-v0.4.0
+- Menu Sonic Beam sur la touche **O**, comme dans le superposé : mode de Sonic (Auto / Always / Off), limite de vitesse et vitesse max, accélération du boost, compteur de vitesse (en haut à gauche, caché quand un écran de BeamNG est ouvert), boutons Unstuck et Lab.
+- **Lab**, avec les onglets qui existent en natif : Sound (volumes des pas, de tous les sons et du vent ; bang supersonique et sa vitesse), Water, Wall, Impact, Jump (style de saut, vitesse de rotation de la boule, hauteur) et Animation (vitesse et plafond). Chaque valeur se tape au clavier en cliquant dessus, même hors de la plage du curseur, et a son bouton de retour au défaut. Les réglages s'appliquent en direct et sont enregistrés dans `settings/sonicnative.json` (un fichier à part du superposé) à chaque fermeture du menu ou du Lab. Les onglets d'effets du superposé (ombre, boost, aura) reviendront avec ces effets.
+- **Unstuck** dans le menu et sur la touche **U** (libre à pied ; seul le camion-benne s'en sert, au volant) : remet Sonic debout sur son dernier point sûr, comme le superposé. Les deux touches se changent dans les commandes de BeamNG.
+- Testé dans BeamNG : touches O et U enregistrées, menu, Lab et compteur affichés, Unstuck ramène Sonic projeté à 15 m sur son dernier point sûr, réglages enregistrés et relus.
+
 ## natif-v0.3.1
 - Course sur les murs corrigée : au-dessus d'environ 150 km/h, elle lâchait au bout de 0,03 s. Le contact avec le mur n'était cherché qu'une fois par image : à 240 km/h, Sonic était déclaré « contre le mur » encore à 5 m de lui, hors de la portée qui le garde sur le mur à l'image suivante, et il percutait le mur à pleine vitesse puis rebondissait. Le contact est maintenant cherché 250 fois par seconde dans le calcul physique, et juste avant le contact sa vitesse est tournée vers le haut ou le long du mur (il n'arrive plus qu'à 3 m/s contre lui) au lieu de s'y écraser.
 - Mesuré sur un mur de Gridmap V2 : de face à 230 km/h, il monte de 33 à 42 m jusqu'en haut et passe par-dessus ; à 150 km/h, environ 30 m ; en biais, il court le long du mur jusqu'à sa fin.

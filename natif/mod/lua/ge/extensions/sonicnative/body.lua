@@ -5,16 +5,19 @@
 -- through nearby vehicles (vehicle extension sonicnative_impact) and puts the camera behind him
 -- (camera mode sonicnativeChase). It draws nothing: the visual module reads M.getState() and
 -- M.getBody(). Same behaviour as the overlay's GE extension (beamng/mod/lua/ge/extensions,
--- sonic.lua, v0.12.3) without its renderer link, rings, menus, settings file and sounds. It also
--- loads the body's sound player (vehicle extension sonicnative_sfx) for whoever plays Sonic's sounds.
+-- sonic.lua, v0.12.3) without its renderer link, rings, menus, settings file and sounds (the O
+-- menu and the settings file are sonicnative_menu's, which calls M.setSettings and M.unstuck). It
+-- also loads the body's sound player (vehicle extension sonicnative_sfx) for whoever plays Sonic's sounds.
 
 local M = {}
 local logTag = 'sonicnative'
 
 local config = require('sonicnative/config')
 local P = config.physics
+local U = config.unstuck
 
--- the overlay's defaults; M.setSettings changes them for this session only (no settings file)
+-- the overlay's defaults; M.setSettings changes them live (sonicnative_menu: the player's saved
+-- settings at start, then the O menu and the Lab)
 local settings = {}
 for k, v in pairs(config.settings) do settings[k] = v end
 
@@ -39,6 +42,7 @@ local lastImpactPos = nil         -- Sonic's centre last frame (hits are swept a
 local lastHit = nil               -- the last hit, for developer checks (M.getLastHit)
 local waterObjects = nil          -- the map's WaterBlocks and WaterPlanes (found once per map)
 local sentWaterZ = false          -- last water height sent to the body
+local safeSpots = {}              -- recent spots where Sonic stood upright, for Unstuck: {pos, yaw}
 -- for the visual module: the same table on every M.getState() call, refreshed each frame
 local state = {active = false, boosting = false, airborne = false, grounded = false, speedKmh = 0, onWater = false, onWall = false,
   water = 0, wall = 0, wallNormal = vec3(0, 0, 1), wantsMove = false, airInput = 0, jumps = 0, surface = 'conc'}
@@ -212,6 +216,43 @@ local function updateBody(unicycle)
   return d ~= nil and d <= half + P.groundProbe
 end
 
+-- Unstuck (O menu button and its key): a crash at speed can leave the walking body on its side or
+-- wedged in a fence with no way to get up. Only on request, Sonic goes back upright to the last
+-- spot he stood on, a few metres back; BeamNG's safeTeleport finds a free place there and resets
+-- the body. Same as the overlay (beamng/mod sonic.lua rememberSafeSpot and unstuck, v0.12.3),
+-- except that a spot far from the last one (U.forget) drops the older ones.
+local function rememberSafeSpot(unicycle, grounded)
+  if not grounded or unicycle:getDirectionVectorUp().z < U.uprightZ then return end
+  local pos = vec3(unicycle:getPosition())
+  local last = safeSpots[#safeSpots]
+  local far = last and (pos - last.pos):length()
+  if far and far < U.spacing then return end
+  -- a car trip or a teleport since the last spot: Unstuck must not send him back there
+  if far and far > U.forget then safeSpots = {} end
+  local dir = bodyVel:length() > 1 and bodyVel or unicycle:getDirectionVector()
+  safeSpots[#safeSpots + 1] = {pos = pos, yaw = math.atan2(dir.y, dir.x)}
+  if #safeSpots > U.keep then table.remove(safeSpots, 1) end
+end
+
+-- true when Sonic was put back; only while he is on foot as Sonic
+local function unstuck()
+  local unicycle = getUnicycle()
+  if stopped or not unicycle or unicycle:getId() ~= sonicBodyId then
+    log('I', logTag, 'Unstuck: Sonic is not on foot, nothing done')
+    return false
+  end
+  local here = vec3(unicycle:getPosition())
+  local spot
+  for i = #safeSpots, 1, -1 do
+    if (safeSpots[i].pos - here):length() >= U.meters then spot = safeSpots[i] break end
+  end
+  spot = spot or safeSpots[1] or {pos = here, yaw = 0}
+  spawn.safeTeleport(unicycle, spot.pos + vec3(0, 0, U.lift), quatFromDir(vec3(-math.cos(spot.yaw), -math.sin(spot.yaw), 0), vec3(0, 0, 1)))
+  lastImpactPos = nil   -- no car hit swept along the way back
+  log('I', logTag, string.format('Unstuck: Sonic put back on his feet %.1f m from where he was', (spot.pos - here):length()))
+  return true
+end
+
 local CAMERA_SETTLE = 3           -- seconds after Sonic takes a body during which his camera is re-applied
 local cameraSetAt = -100
 
@@ -319,6 +360,7 @@ local function onPreRender(dtReal)
     end
     groundedByRay = updateBody(unicycle)
     checkImpacts(unicycle)
+    rememberSafeSpot(unicycle, groundedByRay or runner.grounded == 1)
   else
     bodyVel = vec3()
   end
@@ -331,6 +373,7 @@ local function onClientStartMission()
   carMass, impactLoaded, impactCooldown, lastImpactPos = {}, {}, {}, nil
   waterObjects, sentWaterZ = nil, false
   notAllowedFor = 0
+  safeSpots = {}
   cameraActive = false
   resetRunner()
 end
@@ -382,7 +425,9 @@ M.getBody = function() return bodyFeet, bodyVel end
 M.getState = function() return state end
 M.ensureOnFoot = ensureOnFoot
 M.groundBelow = groundBelow
--- developer tests: change settings for this session (same keys and types as config.settings)
+M.unstuck = unstuck
+-- changes settings live (same keys and types as config.settings; others are ignored) and sends
+-- them to the current body on the next frame: sonicnative_menu, and developer tests
 M.setSettings = function(changes)
   for k, v in pairs(changes or {}) do
     if settings[k] ~= nil and type(v) == type(settings[k]) then settings[k] = v end

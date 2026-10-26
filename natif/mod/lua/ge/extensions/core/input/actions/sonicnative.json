@@ -1,0 +1,4 @@
+{
+"sonicnative_menu"    :{"cat":"gameplay", "order": 90, "ctx": "tlua", "onDown": "if sonicnative_menu then sonicnative_menu.toggleMenu() end", "title": "Sonic Beam menu", "desc": "Open or close the Sonic Beam menu: Sonic mode, speed limit, top speed, boost acceleration, speedometer, Unstuck and the Lab" },
+"sonicnative_unstuck" :{"cat":"gameplay", "order": 91, "ctx": "tlua", "onDown": "if sonicnative_menu then sonicnative_menu.unstuck() end", "title": "Sonic Beam: Unstuck", "desc": "Put Sonic back upright on the last spot he stood on, a few metres back (on foot as Sonic only)" }
+}

@@ -1,0 +1,6 @@
+{
+  "bindings":[
+    {"control":"o", "action":"sonicnative_menu"},
+    {"control":"u", "action":"sonicnative_unstuck"}
+  ]
+}

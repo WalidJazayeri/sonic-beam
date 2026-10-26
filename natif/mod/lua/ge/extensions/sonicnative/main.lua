@@ -34,7 +34,8 @@ for i, row in ipairs(STATES) do
   if row.id == 'drift_left' or row.id == 'drift_right' then DRIFT_STATES[i] = true end
 end
 
--- Settings M.setTuning changes live for tests (numbers only)
+-- Settings M.setTuning changes live (numbers only): the Lab (sonicnative_menu: jumpStyle,
+-- ballSpinTurns, animSpeed, animLimit) and developer tests
 local tuning = {
   facingOffsetDeg = 0,          -- turns the model about Z, in case the converted front is off
   feetOffset = 0,               -- metres added to the feet height

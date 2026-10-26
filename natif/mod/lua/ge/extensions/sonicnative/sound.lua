@@ -22,7 +22,7 @@ local SFX_STOP = 'if sonicnative_sfx then sonicnative_sfx.stopAll() end'
 local SFX_CHECK_SECONDS = 2       -- the body is asked this often to load sonicnative_sfx again (a Lua reload drops it)
 local MAX_EVENTS = 16             -- sounds kept for status()
 
--- this session's settings (M.setSettings), starting from sounds.lua
+-- this session's settings (M.setSettings: the player's saved ones and the Lab, sonicnative_menu), starting from sounds.lua
 local settings = {}
 for k, v in pairs(S.settings) do settings[k] = v end
 
@@ -621,7 +621,8 @@ M.reload = function()
   return M.status()
 end
 
--- developer tests: change settings for this session (same keys and types as sounds.lua settings)
+-- changes settings live (same keys and types as sounds.lua settings; others are ignored):
+-- sonicnative_menu (the Lab's Sound tab), and developer tests
 M.setSettings = function(changes)
   for k, v in pairs(type(changes) == 'table' and changes or {}) do
     if settings[k] ~= nil and type(v) == type(settings[k]) then settings[k] = v end
