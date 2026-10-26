@@ -59,7 +59,11 @@ local lastError = nil
 local warned = {}               -- problems already logged: logged once, never every frame
 
 local spawned, rendered = false, false
-local driveMode = 'engine'      -- 'engine': the engine advances the thread; 'manual': Lua sets its position each frame
+-- 'manual': Lua sets the thread's position each frame; 'engine': the engine advances the thread and
+-- Lua only estimates where it is. Manual, so the pose drawn is the one Lua knows: the sharp motion
+-- blur's mask follows his bones from that phase (in engine mode it drifted off his legs) and the
+-- footsteps fall on the frames the converter found
+local driveMode = 'manual'
 local clip, playing = nil, nil  -- sequence asked for, sequence really playing ('ambient' when the clip is missing)
 local clipRate, clipPhase = 1, 0
 local playedSerial = -1         -- sm.animSerial the playing sequence was started for
@@ -955,13 +959,16 @@ end
 -- (airTricks); whether only the ball shell shows. For the boost effects (sonicnative_fx): his
 -- smoothed speed (speedKmh, horizontal plus the climb on a wall), how far the jump ball has formed
 -- (ballAmount 0..1), the boost key, his heading (rad), his feet (a vec3), his velocity (vel =
--- {vx, vy, vz}, the last real one) and what Sonic's StaticShape was given (place: setPosRot's x, y,
--- z, qx, qy, qz, qw and the scale field). The same tables every call: read them, do not keep them.
+-- {vx, vy, vz}, the last real one), what Sonic's StaticShape was given (place: setPosRot's x, y,
+-- z, qx, qy, qz, qw and the scale field), his up before the ball's roll (up, a vec3) and how high
+-- above his feet the ball's middle is (ballPivot, m). The same tables every call: read them, do not
+-- keep them.
 local NO_STEPS = {}
 local animVel = {0, 0, 0}
 local anim = {clip = nil, sequence = nil, phase = 0, rate = 1, steps = NO_STEPS, shown = false,
   state = nil, stateCount = 0, enterSound = nil, airTricks = 0, ball = false,
-  speedKmh = 0, ballAmount = 0, boostKey = false, heading = 0, feet = feet, vel = animVel, place = placed}
+  speedKmh = 0, ballAmount = 0, boostKey = false, heading = 0, feet = feet, vel = animVel, place = placed,
+  up = tilt, ballPivot = 0}
 M.getAnim = function()
   local c = playing and clipsByName[playing]
   local row = STATES[sm.state]
@@ -973,7 +980,7 @@ M.getAnim = function()
   anim.airTricks, anim.ball = sm.airTricks, ball.shown
   anim.speedKmh, anim.ballAmount, anim.boostKey, anim.heading = sm.speedKmh, sm.ballAmount, sm.boostKey, sm.heading
   animVel[1], animVel[2], animVel[3] = sm.lastVx, sm.lastVy, sm.lastVz
-  anim.feet, anim.vel, anim.place = feet, animVel, placed
+  anim.feet, anim.vel, anim.place, anim.up, anim.ballPivot = feet, animVel, placed, tilt, ball.pivot
   return anim
 end
 

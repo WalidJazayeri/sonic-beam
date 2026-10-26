@@ -1,7 +1,8 @@
 -- SPDX-License-Identifier: MIT
 -- Sonic Beam, native mode: the numbers of Sonic's boost effects (GE extension sonicnative_fx: the
--- speed blur, the aura, the lightning, the Power Boost trail and the flash of a boost start) and
--- the Lab's defaults for them (sonicnative_menu, Boost and Aura tabs). A hand-maintained copy of
+-- speed blur, the aura, the lightning, the Power Boost trail and the flash of a boost start, plus the
+-- native mode's motion blur that keeps him sharp) and the Lab's defaults for them (sonicnative_menu,
+-- Boost, Aura and Motion blur tabs). A hand-maintained copy of
 -- the overlay's values (overlay v0.12.3: beamng/src/game.cpp:266-313 and 520-686,
 -- beamng/sheets/tuning.json, beamng/src/shared_draw.hpp:100-186, beamng/mod sonic.lua settings);
 -- nothing here is read from the overlay at run time, so a change made in the overlay does not
@@ -146,8 +147,59 @@ M.sprites = {cameraPull = {bolt = 0.25, orb = 0.3, glow = 1.5, ring = 1.5},
 M.light = {colour = {0.25, 0.55, 1.0}, radius = 8, peak = 6000, castShadows = false}   -- peak in lumens [not tested]
 
 -- native only: body bolts when the converter wrote no bone tracks: random points on a capsule that
--- follows Sonic (centre this high above his feet, radius, height), in metres
+-- follows Sonic (centre this high above his feet, radius, height), in metres; the sharp motion blur's
+-- mask without bone tracks too
 M.capsule = {up = 0.55, radius = 0.3, height = 1.0}
+
+-- native only: Sonic kept sharp in the motion blur (GE extension sonicnative_sharp). BeamNG's
+-- (PostFxMotionBlur) spares only vehicles: every other pixel blurs by the camera's motion, so Sonic,
+-- whom the camera follows, smeared like passing scenery. While he is on foot and BeamNG's motion blur
+-- is on, BeamNG's stops drawing and five compute passes (shaders/sonicnative/motionBlur*.cs.hlsl)
+-- blur the frame from BeamNG's velocity buffer instead, with no motion on the pixels inside rounded
+-- cones around his bones (sonicnative_fx hands his pose over every frame).
+M.sharp = {
+  -- the Lab's defaults (Motion blur tab)
+  settings = {
+    sharpSonic = true,            -- on foot, BeamNG's motion blur gives way to this one
+    motionBlurScale = 1,          -- x BeamNG's motion blur strength in this one (Lab 0..2)
+  },
+  strength = 1,                   -- half blur = per-frame motion x BeamNG's strength x motionBlurScale x this (close to BeamNG's at 150 km/h)
+  maxRadius = 0.03,               -- longest half blur, share of the screen's height
+  tile = 48,                      -- px, the tile textures' cell (1/tile of the screen); no blur is longer
+  softDepth = 0.02,               -- share of the distance within which two pixels count as one surface
+  margin = 0.03,                  -- m added around every cone (the pose is sampled between two keys of the bone tracks)
+  groundClear = 0.02,             -- m above the plane through his feet (square to his up) a pixel must be to be his: the ground stays blurred
+  bound = 1.6,                    -- m from his middle (feet + capsule.up) beyond which no pixel is his
+  ballRadius = 0.3,               -- m, the ball shell's radius when the manifest has none
+  renderPriority = 1.5,           -- PostEffect order; BeamNG's motion blur runs at 1 in the same bin (PFXBeforeBin OverlayRender)
+  -- the rounded cones: from a bone of the converter's tracks toward another, the radius at each end
+  -- (model metres, x Sonic's scale) and how far it goes, in lengths between the two bones (1: to
+  -- the second; more: past it, for the quills and the fingers beyond their bones). At most
+  -- maxSegments (motionBlurPrepare.cs.hlsl has 20). Tuned by eye with sonicnative_sharp.debug({mask = true}).
+  segments = {
+    {'Hips', 'Spine1', 0.15, 0.14, 1},
+    {'Spine1', 'Head', 0.13, 0.16, 1},
+    {'Spine1', 'UpperArm_L', 0.1, 0.08, 1},
+    {'Spine1', 'UpperArm_R', 0.1, 0.08, 1},
+    {'Head', 'Needle1_U_C', 0.24, 0.14, 1.3},
+    {'Head', 'Needle1_U_L', 0.16, 0.09, 1.6},
+    {'Head', 'Needle1_U_R', 0.16, 0.09, 1.6},
+    {'Head', 'Needle1_B_L', 0.14, 0.08, 1.6},
+    {'Head', 'Needle1_B_R', 0.14, 0.08, 1.6},
+    {'Head', 'Needle1_B_C', 0.16, 0.09, 1.6},
+    {'UpperArm_L', 'ForeArm_L', 0.07, 0.06, 1},
+    {'ForeArm_L', 'Hand_L', 0.06, 0.11, 1.7},
+    {'UpperArm_R', 'ForeArm_R', 0.07, 0.06, 1},
+    {'ForeArm_R', 'Hand_R', 0.06, 0.11, 1.7},
+    {'Thigh_L', 'Calf_L', 0.08, 0.07, 1},
+    {'Calf_L', 'Foot_L', 0.07, 0.1, 1},
+    {'Foot_L', 'Toe_L', 0.11, 0.09, 1.15},
+    {'Thigh_R', 'Calf_R', 0.08, 0.07, 1},
+    {'Calf_R', 'Foot_R', 0.07, 0.1, 1},
+    {'Foot_R', 'Toe_R', 0.11, 0.09, 1.15},
+  },
+  maxSegments = 20,
+}
 
 -- native only: the converter's brightness ladder (sonic_data.hpp kFxAlphas: top x ratio^(k - count)),
 -- used when the manifest has no "alphas"; a quad dimmer than dropShare x the first level is dropped

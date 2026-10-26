@@ -12,6 +12,8 @@
 --   trail           the overlay's three ribbons (beam, locus, arcs) rebuilt each frame in the
 --                   ProceduralMesh sonicnative_fx_trail
 --   flash light     a blue PointLight at a boost start, like Frontiers' plight01
+-- It also hands Sonic's pose (his bones, or the ball shell) to sonicnative_sharp every frame, the
+-- motion blur that keeps him sharp.
 -- The meshes have no vertex colour: each quad takes the material of its brightness level
 -- (<material>_<k>, the manifest's "alphas" ladder). Depth tested, unlike the overlay: sprites are
 -- pulled toward the camera so Sonic and the ground do not cut them. Every texture comes from the
@@ -80,7 +82,13 @@ local defRead, materialsChecked = false, false
 local fxDef = nil                 -- {version, materials}: nil when the manifest has no "fx"
 local kinds = {}                  -- sprite and ribbon kinds: {base, names[k], have[k], count, usable, gx, gy}
 local auraDef = nil               -- {meshes, materials, alpha, colour, skins, skinNames[i][k], can = {reload, skin, steps}}
-local bones = nil                 -- {count, names, clips = {name = {frames, loop, pos}}, clipCount, file}
+local bones = nil                 -- {count, names, clips = {name = {frames, loop, pos}}, clipCount, file, segments}
+-- Sonic as he is drawn this frame, handed to sonicnative_sharp (read there, not kept): the ball shell
+-- (its middle and radius) or his bones in the world (boneX/Y/Z, the cones' bone indices, bonesOk),
+-- the StaticShape's place for a capsule when there are no bone tracks, his feet and his up
+local sharpPose = {ball = false, ballX = 0, ballY = 0, ballZ = 0, ballRadius = E.sharp.ballRadius,
+  bonesOk = false, boneX = nil, boneY = nil, boneZ = nil, segments = nil, place = nil,
+  feetX = 0, feetY = 0, feetZ = 0, upX = 0, upY = 0, upZ = 1}
 
 -- the brightness ladder: level k (1-based) is a quad drawn at alpha a[k]; nearest level in log
 -- space, none below drop
@@ -184,6 +192,20 @@ local function readBones(e)
     report('W', 'bonesClips', 'the bone tracks ' .. file .. ' have no usable clip: body bolts ride a capsule around Sonic')
     return nil
   end
+  -- the sharp motion blur's rounded cones, by bone index: {from, toward, radius at from, radius at
+  -- the end, reach (in from-toward lengths)}
+  local index = {}
+  for i, name in ipairs(b.names) do index[name] = i end
+  b.segments = {}
+  for _, g in ipairs(E.sharp.segments) do
+    local i, j = index[g[1]], index[g[2]]
+    if i and j then
+      b.segments[#b.segments + 1] = {i, j, g[3], g[4], tonumber(g[5]) or 1}
+    else
+      report('W', 'sharpBone:' .. tostring(g[1]) .. '-' .. tostring(g[2]), 'the bone tracks have no ' .. tostring(g[1])
+        .. ' or ' .. tostring(g[2]) .. ': that part of Sonic is not kept sharp in the motion blur')
+    end
+  end
   return b
 end
 
@@ -191,6 +213,11 @@ local function readManifest()
   defRead, materialsChecked = true, false
   fxDef, auraDef, bones, kinds = nil, nil, nil, {}
   local m = jsonReadFile(DATA .. 'manifest.json')
+  -- the ball shell's radius, for the sharp motion blur: the manifest's ball.radius is already in
+  -- metres (the converter scales it, natif/converter/main.cpp)
+  local ball = type(m) == 'table' and type(m.ball) == 'table' and m.ball or nil
+  local r = ball and tonumber(ball.radius)
+  sharpPose.ballRadius = r and r > 0 and r or E.sharp.ballRadius
   local fx = type(m) == 'table' and m.fx or nil
   setLadder(type(fx) == 'table' and fx.alphas or nil)
   if type(fx) ~= 'table' then
@@ -1021,6 +1048,29 @@ local function updateBlur(dt)
   setBlur(blurValue * max(0, settings.blurStrength))
 end
 
+-- ---------------------------------------------------------------- Sonic's pose, for the sharp motion blur
+
+-- the motion blur that keeps Sonic sharp (sonicnative_sharp), when loaded: he is given as he is drawn
+-- now (pose nil: not on foot, it gives BeamNG's motion blur back)
+local function sendPose(a)
+  local sharp = loaded('sonicnative_sharp')
+  if not (sharp and type(sharp.update) == 'function') then return end
+  local P = nil
+  if a then
+    P = sharpPose
+    P.ball = inputs.hidden
+    P.ballX, P.ballY, P.ballZ = feetX, feetY, feetZ + (tonumber(a.ballPivot) or E.capsule.up)
+    P.segments = bones and bones.segments or nil
+    P.bonesOk = not inputs.hidden and P.segments ~= nil and sampleBones(a)
+    P.boneX, P.boneY, P.boneZ, P.place = boneX, boneY, boneZ, place
+    local u = a.up
+    P.feetX, P.feetY, P.feetZ = feetX, feetY, feetZ
+    P.upX, P.upY, P.upZ = u and tonumber(u.x) or 0, u and tonumber(u.y) or 0, u and tonumber(u.z) or 1
+  end
+  local ok, err = pcall(sharp.update, P)
+  if not ok then report('E', 'sharp', 'the sharp motion blur failed: ' .. tostring(err)) end
+end
+
 -- ---------------------------------------------------------------- aura
 
 local function setAuraMeshes(o, inner, halo)
@@ -1195,6 +1245,7 @@ local function hideAll(o)
   hideMesh(trailB)
   hideMesh(spriteB)
   blurOff()
+  sendPose(nil)
   lightOff()
 end
 
@@ -1277,6 +1328,8 @@ local function frame(dt, o)
   submit(trailB)
   submit(spriteB)
   if dbg.bones then drawBones(a) end
+  -- last: an error above reaches hideAll (sendPose(nil)) before the sharp blur was turned on this frame
+  sendPose(a)
 end
 
 -- ---------------------------------------------------------------- lifecycle
@@ -1377,6 +1430,7 @@ M.setSettings = function(values)
 end
 
 M.getSettings = function() return settings end
+
 
 local function kindsStatus()
   local out = {}

@@ -5,6 +5,17 @@ Le mode natif (dossier `natif/`) a ses propres versions : le numéro est dans `n
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## natif-v0.5.1
+- **Sonic reste net dans le flou de mouvement de BeamNG.** Ce flou, actif par défaut dans les options graphiques, ne donne leur vrai mouvement qu'aux véhicules : tout le reste reçoit le mouvement de la caméra, et comme elle suit Sonic, il était étalé comme le décor qui défile (le superposé le dessinait après ce flou, il restait net). BeamNG ne laisse rien d'autre qu'un véhicule écrire son mouvement (essayé : un effet d'écran ne peut pas écrire dans son image des vitesses).
+- Quand Sonic est à pied et que le flou de mouvement de BeamNG est activé, le mod fait donc le sien à sa place, avec la même force : cinq passes de calcul (préparation des vitesses, maximum par tuile en largeur puis en hauteur, voisinage, flou final, d'après McGuire et al. 2012) qui floutent le décor à partir de l'image des vitesses de BeamNG, sauf les pixels de Sonic. Ceux-ci sont repérés par leur profondeur dans 20 volumes posés sur ses os, qui suivent sa pose (la coque de la boule pendant le saut, un seul volume s'il manque les os) ; le sol ou le mur sous ses pieds en est exclu et reste flou. Le sol vu en biais ne déborde pas sur ses chaussures (sa pente est prolongée avant de comparer les profondeurs).
+- Le flou de BeamNG n'est jamais désactivé : il est seulement déplacé vers une étape de rendu qui ne dessine rien. Il reste « activé » avec sa force, donc les options, le mode photo (qui enregistre cet état à l'ouverture et le réécrit dans les options à la fermeture) et l'éditeur voient le vrai réglage du joueur ; une première version qui le désactivait aurait fait décocher le flou de mouvement des options en sortant du mode photo. Le flou du mod ne tourne que si celui de BeamNG est activé ; en voiture ou la case décochée, celui de BeamNG reprend sa place.
+- Nouveau module `sonicnative_sharp` (`fx.lua` lui donne la pose de Sonic à chaque image ; `fx.lua` avait atteint la limite de 200 variables locales de Lua).
+- Lab : onglet **Motion blur** (garder Sonic net, force du flou en x de celle de BeamNG).
+- L'animation de Sonic est maintenant posée par le mod à chaque image (mode « manuel ») au lieu d'avancer seule dans le moteur : le masque suit exactement ses jambes (en mode moteur, la position estimée dérivait et ses jambes restaient floues), et les bruits de pas tombent sur les bonnes images.
+- Relu par des agents (shaders, cycle de vie, algorithme) : six problèmes confirmés, tous corrigés sauf un, gardé en limite connue.
+- Testé dans BeamNG (Gridmap V2, 1440p) : à 150 km/h, le décor est flou comme avec le flou de BeamNG et Sonic est net, jambes comprises, boule de saut comprise ; case décochée, flou de BeamNG coupé puis remis, effets coupés comme en voiture : le flou de BeamNG reste activé avec sa force 0,3 et reprend sa place ; environ 0,4 ms de calcul graphique en plus que le flou de BeamNG (jusqu'à 1,3 ms selon le compteur).
+- À savoir : l'aura et les éclairs, transparents, prennent la profondeur du décor derrière eux et sont un peu étirés par le flou, comme avec celui de BeamNG.
+
 ## natif-v0.5.0
 - Effets du boost en natif, refaits avec les outils de BeamNG (le superposé avait ses propres shaders par-dessus l'image) :
   - **flou de vitesse radial** vers Sonic : notre propre shader, branché dans les effets d'écran de BeamNG (Direct3D 12) ; il monte de 150 à 600 km/h et Sonic reste net au centre ;

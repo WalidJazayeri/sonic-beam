@@ -2,9 +2,11 @@
 -- Sonic Beam, native mode: the O menu, the Lab and the Unstuck key. The menu (Sonic mode, speed
 -- limit, top speed, boost acceleration, speedometer, Unstuck, Lab) and the Lab are the overlay's
 -- (beamng/mod/lua/ge/extensions, sonicfrontiers/sonic.lua drawMenu and drawLab, v0.12.3), with the
--- Lab tabs the native mode has: Sound, Boost, Aura, Water, Wall, Impact, Jump, Animation. Values
+-- Lab tabs the native mode has: Sound, Boost, Aura, Motion blur (native only), Water, Wall, Impact,
+-- Jump, Animation. Values
 -- apply live through sonicnative_body.setSettings, sonicnative_sound.setSettings,
--- sonicnative_fx.setSettings (the boost effects) and sonicnative_main.setTuning.
+-- sonicnative_fx.setSettings (the boost effects), sonicnative_sharp.setSettings (the motion blur
+-- that keeps Sonic sharp) and sonicnative_main.setTuning.
 -- The player's settings are saved in the user folder (settings/sonicnative.json) when the menu or
 -- the Lab closes, and loaded when this extension loads, before Sonic takes a body. Unstuck is
 -- sonicnative_body's. Keys: input actions sonicnative_menu (O) and sonicnative_unstuck (U), in
@@ -33,6 +35,7 @@ add('ballSpinTurns', -1, 'anim')    -- main.lua's default: -1 spins the ball at 
 add('animSpeed', animConfig.tuning.animSpeed, 'anim')
 add('animLimit', animConfig.tuning.animLimit, 'anim')
 for k, v in pairs(effects.settings) do add(k, v, 'fx') end    -- boost effects: trail, lightning, blur, aura, light
+for k, v in pairs(effects.sharp.settings) do add(k, v, 'sharp') end   -- the motion blur that keeps Sonic sharp
 add('showSpeed', true, 'menu')      -- the speedometer (overlay default, beamng/mod sonic.lua settings.showSpeed)
 
 -- the settings' setters: module, function
@@ -41,6 +44,7 @@ local SETTERS = {
   sound = {'sonicnative_sound', 'setSettings'},
   anim = {'sonicnative_main', 'setTuning'},
   fx = {'sonicnative_fx', 'setSettings'},
+  sharp = {'sonicnative_sharp', 'setSettings'},
 }
 local CHOICES = {
   sonicMode = {auto = true, always = true, off = true},
@@ -136,6 +140,7 @@ local function sendChanges()
   if dirty.sound then send('sound') end
   if dirty.anim then send('anim') end
   if dirty.fx then send('fx') end
+  if dirty.sharp then send('sharp') end
   if dirty.body and clock - bodySentAt >= BODY_SEND_SECONDS then send('body') end
 end
 
@@ -173,8 +178,8 @@ local LAB_MIN_DB, LAB_MAX_DB = soundConfig.rules.muteDb, 12   -- the overlay's r
 local LAB_FLOATS = {'stepsDb', 'soundDb', 'windDb', 'boostBoomKmh', 'waterRunKmh', 'swimKmh', 'wallRunKmh', 'wallGrip',
   'impactForce', 'carDamage', 'ballSpinTurns', 'jumpHeight', 'animSpeed', 'animLimit',
   'trailLength', 'trailIntensity', 'lightning', 'trailFade', 'fxSpeedAmount', 'blurStrength', 'boostLight',
-  'auraIntensity', 'auraLightning'}
-local LAB_BOOLS = {'boostBoom', 'runOnWater', 'runOnWalls', 'fxBySpeed'}
+  'auraIntensity', 'auraLightning', 'motionBlurScale'}
+local LAB_BOOLS = {'boostBoom', 'runOnWater', 'runOnWalls', 'fxBySpeed', 'sharpSonic'}
 local labOpen, labWidgets = false, nil
 
 local function openLab(tab)
@@ -336,6 +341,20 @@ local function drawLab()
       im.TextUnformatted('The blue aura on Sonic while he boosts or runs fast:')
       labSlider('Aura intensity', 'auraIntensity', 0, 2, UNITS.times)
       labSlider('Aura lightning', 'auraLightning', 0, 3, UNITS.times)
+      im.EndTabItem()
+    end
+    if labTab('Motion blur') then
+      -- native only: BeamNG's motion blur spares only vehicles and smeared Sonic (sonicnative_sharp)
+      local ext = loaded('sonicnative_sharp')
+      local sharp = ext and type(ext.getState) == 'function' and ext.getState() or nil
+      im.TextUnformatted("BeamNG's motion blur (Options > Graphics) while Sonic is on foot:")
+      local on = labSwitch('Keep Sonic sharp (the scenery stays blurred)', 'sharpSonic')
+      if not on then im.BeginDisabled(true) end
+      labSlider('Motion blur strength', 'motionBlurScale', 0, 2, UNITS.times)
+      if not on then im.EndDisabled() end
+      if sharp and not sharp.beamngOn then
+        im.TextUnformatted('Motion blur is off in the options: nothing to do.')
+      end
       im.EndTabItem()
     end
     if labTab('Water') then
