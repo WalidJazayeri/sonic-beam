@@ -75,6 +75,7 @@ local recentSpeed = 0             -- his horizontal speed of the last instants (
                                   -- at the contact must not cost him the wall run)
 local lastDirH = vec3(0, 1, 0)    -- where he was last running
 local wallProbe = 0               -- seconds until the next look for a wall
+local catchProbe, catchGap = 0, nil   -- while approaching: next look at the wall, metres from the ball's centre to it
 local wallApproach = false        -- the wall is ahead: he keeps running at it until he touches it
 local approachDir = vec3(0, 1, 0)
 local debugInfo = {}           -- last physics step, for the developer probe M.getDebug
@@ -263,8 +264,28 @@ local function onPhysicsStep(dt)
     end
   end
   if wallState ~= 0 and wallApproach then
-    -- the wall is just ahead: straight at it at full speed, the controller out of the way
-    applyAccelEverywhere((approachDir * wallSpeed - vel) * P.wallGain)
+    -- the wall is just ahead. The contact is found here, 250 times a second: looked for once a frame,
+    -- at 240 km/h he was "touching" 5 m before the wall, out of the wall's hold reach the next frame
+    catchProbe = catchProbe - dt
+    if catchProbe <= 0 and ballCenter then
+      catchProbe = 0.004
+      local c = obj:getPosition() + obj:getNodePosition(ballCenter)
+      local d = obj:castRayStatic(c, -wallN, ballRadius + 30)
+      catchGap = (d and d < ballRadius + 30) and d or nil
+    end
+    local into = -vel:dot(wallN)                                     -- his speed towards the wall
+    local gap = catchGap and (catchGap - ballRadius - P.wallContact) -- metres before the ball touches it
+    if gap and gap <= 0 then
+      wallApproach, wallTime = false, 0                              -- touching: onto the wall
+    elseif gap and into > P.wallCatchSpeed and into * into >= 2 * P.wallCatchDecel * gap then
+      -- turning onto the wall now: by the contact his speed runs up / along it and only a little into
+      -- it, instead of hitting it full on and bouncing off (uniform on every node: no strain on the body)
+      local target = wallDir * wallSpeed - wallN * P.wallCatchSpeed
+      applyAccelEverywhere((target - vel) / math.max(gap / into, 0.004))
+    else
+      -- still far: straight at it at full speed, the controller out of the way
+      applyAccelEverywhere((approachDir * wallSpeed - vel) * P.wallGain)
+    end
     setGlide(true)
     setWalkerSpeed(speed)
     return
@@ -409,6 +430,7 @@ wallEnter = function(vel, amount)
   if not n then n = -dirH end
   wallN, wallTime, wallSpeed = n, 0, math.max(recentSpeed, vel:length())
   wallApproach, approachDir = true, dirH
+  catchProbe, catchGap = 0, nil
   if -n:dot(dirH) > P.wallHeadOn then
     wallState, wallDir = 1, unit(up - n * n:dot(up), up)   -- head on: straight up
   else
@@ -432,10 +454,10 @@ wallStep = function(dt, vel)
   if wallDir:dot(up) > 0.7 then wallState = 1 else wallState = (-wallN):dot(wallDir:cross(up)) > 0 and 3 or 2 end
   wallTime = wallTime + dt
   if wallApproach then
-    local d = obj:castRayStatic(c, approachDir, ballRadius + 1.5 + wallSpeed * dt * 2)
-    if d and d < ballRadius + 0.7 + wallSpeed * dt * 2 then
-      wallApproach, wallTime = false, 0   -- touching: onto the wall
-    elseif not d or not boosting or wallTime > 0.6 then
+    -- the contact itself is found in onPhysicsStep; here the approach is only given up
+    local reach = ballRadius + 2 + wallSpeed * P.wallLookAhead * 2
+    local d = obj:castRayStatic(c, approachDir, reach)
+    if not d or d >= reach or not boosting or wallTime > 0.6 then
       wallApproach, wallState, wallCooldown = false, 0, 0.3   -- the wall was not there after all
     end
     return

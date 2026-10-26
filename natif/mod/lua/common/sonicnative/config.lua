@@ -38,6 +38,11 @@ M.physics = {
   wallLookAhead = 0.15,       -- s
   wallSpeedMemory = 150,      -- m/s2
   wallHoldReach = 2.0,        -- m
+  -- native only: the contact with the wall, found in the physics step, and the turn onto it just
+  -- before it (above ~150 km/h he hit the wall full on, bounced off and lost it at once)
+  wallContact = 0.15,         -- m, gap between ball and wall that counts as touching
+  wallCatchSpeed = 3,         -- m/s, speed left towards the wall at the contact
+  wallCatchDecel = 800,       -- m/s2, how hard the turn onto the wall may be (sets how early it starts)
   waterFooting = 0.9,         -- m, shallower than this he has his footing and just runs
   groundProbe = 0.35,         -- m, gap under the body that still counts as on the ground
   coastAccel = 8,             -- m/s2

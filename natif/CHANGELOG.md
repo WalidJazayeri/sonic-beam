@@ -5,6 +5,11 @@ Le mode natif (dossier `natif/`) a ses propres versions : le numéro est dans `n
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## natif-v0.3.1
+- Course sur les murs corrigée : au-dessus d'environ 150 km/h, elle lâchait au bout de 0,03 s. Le contact avec le mur n'était cherché qu'une fois par image : à 240 km/h, Sonic était déclaré « contre le mur » encore à 5 m de lui, hors de la portée qui le garde sur le mur à l'image suivante, et il percutait le mur à pleine vitesse puis rebondissait. Le contact est maintenant cherché 250 fois par seconde dans le calcul physique, et juste avant le contact sa vitesse est tournée vers le haut ou le long du mur (il n'arrive plus qu'à 3 m/s contre lui) au lieu de s'y écraser.
+- Mesuré sur un mur de Gridmap V2 : de face à 230 km/h, il monte de 33 à 42 m jusqu'en haut et passe par-dessus ; à 150 km/h, environ 30 m ; en biais, il court le long du mur jusqu'à sa fin.
+- Le mode superposé (en pause) a la même physique, donc le même défaut ; il n'est pas corrigé.
+
 ## natif-v0.3.0
 - Toutes les animations du mode superposé : marche, course, boost avec inclinaison à gauche et à droite, **drift** à gauche et à droite (boost tenu au-dessus de 60 km/h en tournant fort), départ de saut, **boule de saut**, **figures en l'air** (après 0,8 s en l'air sans saut), atterrissage (0,45 s), course sur les murs (montée, gauche, droite) et **nage**. Elles sont choisies par la même logique que le superposé (priorités, délais, inclinaison de 16° dans les virages), portée en Lua avec ses nombres dans `lua/common/sonicnative/anim.lua`.
 - La boule de saut est la vraie coque de Frontiers : un second modèle qui tourne autour de Sonic pendant le saut, Sonic étant caché une fois la boule formée, comme dans le superposé.
