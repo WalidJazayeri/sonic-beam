@@ -213,6 +213,51 @@ local UNITS = {
     reset = function(x) return x < 0 and 'Frontiers' or string.format('%g', x) end},
 }
 
+-- what each Lab setting does, shown when the mouse is over it (checked against the code that uses it)
+local LAB_TIPS = {
+  stepsDb = "Volume of Sonic's footsteps, on top of All Sonic sounds. Higher is louder, lower is quieter; the lowest setting mutes them. Landing sounds are not footsteps and do not change.",
+  soundDb = 'Volume of every Sonic sound: footsteps, jumps, boost, wind, sonic booms and the rest. The Footsteps and Wind sliders stack on top of it. Higher is louder; the lowest setting mutes Sonic completely.',
+  windDb = 'Volume of the rushing wind heard at high speed and while boosting. Higher is louder, lower is quieter; the lowest setting mutes it. It stacks with All Sonic sounds.',
+  boostBoom = 'On: a boost started at or above the speed below sets off a sonic boom, left behind where it began; landing while boosting counts as a new start. Off: boosts never boom. Fast car hits boom either way.',
+  boostBoomKmh = 'Sonic must already be this fast when a boost starts, or when he lands while boosting, for it to boom; speeding past it mid-boost does not count. Lower booms more often. Only used while the switch above is on.',
+  trailLength = 'How long the blue trail lingers behind Sonic while he boosts, and so how far back it reaches. Higher makes it longer; lower makes it shorter.',
+  trailIntensity = 'How bright the blue trail behind Sonic is while he boosts. Higher makes it brighter; 0 hides the trail and the lightning arcs along it.',
+  lightning = "How many lightning bolts crackle around Sonic and his trail while he boosts or as a boost starts, and how bright the trail's arcs are. 0 removes them. Bolts on his body are set in the Aura tab.",
+  trailFade = "How many metres the trail takes to fade in behind Sonic's back. Higher makes it start softer and further back; 0 starts it at full strength right behind him.",
+  fxBySpeed = "On: the trail, the lightning and the aura grow with Sonic's speed and reach full strength at the speed shown below. Off: they stay at full strength at any speed. The speed blur and boost light are not affected.",
+  fxSpeedAmount = "How much the effects depend on Sonic's speed. At 0, speed changes nothing; at 1, they start from nothing when he stands still. The percentage is their strength standing still. Only used while the switch above is on.",
+  blurStrength = 'Strength of the radial blur streaking the screen toward Sonic from 150 km/h (strongest at 600, half without the boost key) and briefly when a boost starts or he hits a car. Higher gives longer streaks; 0 turns it off.',
+  boostLight = 'How bright the blue light is that flashes on the surroundings when a boost starts or Sonic hits a car. Higher is brighter; 0 turns it off.',
+  auraIntensity = "How bright the blue aura on Sonic's body is while he boosts or runs fast. Higher is brighter; 0 hides it. It fades while he is a ball, and grows with his speed when the Boost tab's speed switch is on.",
+  auraLightning = "How many lightning bolts crackle on Sonic's body while his aura is lit. Higher gives more; 0 removes them. They work even with the aura intensity at 0, follow the Boost tab's speed switch, and hide while he is a ball.",
+  sharpSonic = "On: while Sonic is on foot, the scenery still blurs but Sonic stays sharp. Off: BeamNG's own motion blur smears Sonic too. Needs motion blur turned on in BeamNG's graphics options.",
+  motionBlurScale = "How strong the motion blur is on foot, relative to BeamNG's own strength setting. Higher blurs the scenery more, up to a limit; 0 removes the motion blur on foot. Only used while the switch above is on.",
+  runOnWater = 'On: Sonic runs on top of the water once he is fast enough, even where it is shallow. Off: he never runs on water and swims wherever it is too deep to stand.',
+  waterRunKmh = 'How fast Sonic must go to run on water; once on it, he stays up until a bit slower than this. Lower lets him run on it slower, higher needs more speed. Only used while Run on water is on.',
+  swimKmh = "Sonic's top speed while swimming in water too deep to stand in. Higher swims faster, lower slower. Boost does not speed him up while he swims.",
+  runOnWalls = 'On: boosting into a steep wall at the Wall run speed or faster, Sonic runs on it: straight up when he meets it head on, along it otherwise. Off: he never runs on walls.',
+  wallRunKmh = 'The speed Sonic needs, boosting into a wall, to start running on it; it does not limit his speed on the wall. Lower catches walls at slower speeds, higher needs more. Only used while Run on walls is on.',
+  wallGrip = 'How long Sonic can stay on a wall before he falls away from it. Higher lets him run further up or along it; lower drops him sooner. Only used while Run on walls is on.',
+  impactForce = "How hard Sonic hits, as if he weighed this many tonnes. Higher knocks cars further and, when he loses speed by the car's mass, slows him less; at 0 his hits do not move cars. Unused when impacts are off.",
+  carDamage = 'How much a car crumples where Sonic hits it. Higher puts more of the blow on the spot he hits, denting it deeper; 0 pushes the whole car evenly. No effect when Impact force is 0 or impacts are off.',
+  ballSpinTurns = "How fast Sonic's jump ball rolls, in turns per second. Higher spins faster; 0 stops it spinning. Type a negative value to use Frontiers' own speed.",
+  jumpHeight = 'How high Sonic jumps. The height follows the value: x2 jumps about twice as high, x0.5 about half as high. Jumps off a wall keep their own strength.',
+  animSpeed = "How fast Sonic's legs move for his speed when walking, running, boosting or running on walls. Higher makes his strides quicker, lower slower, and his footsteps follow. The limit below still caps it.",
+  animLimit = "The fastest Sonic's legs may move when walking, running, boosting or running on walls. Higher lets his strides keep speeding up at very high speed; lower caps them sooner for a calmer look.",
+}
+
+-- a tooltip for the item just drawn while the mouse is over it, greyed-out items included, wrapped
+-- like BeamNG's own help markers (imgui ShowHelpMarker); it goes away when the mouse leaves
+local function tip(text)
+  if text and im.IsItemHovered(im.HoveredFlags_AllowWhenDisabled) then
+    im.BeginTooltip()
+    im.PushTextWrapPos(im.GetFontSize() * 30)
+    im.TextUnformatted(text)
+    im.PopTextWrapPos()
+    im.EndTooltip()
+  end
+end
+
 -- a setting's value written beside its slider: a click turns it into a box to type any value,
 -- beyond the slider's range too; Enter (or a click elsewhere) keeps it
 local editKey, editBuf, editFrames = nil, nil, 0
@@ -235,7 +280,8 @@ local function editableValue(key, ptr, text)
   if im.Selectable1(shown .. '##value' .. key, false, 0, im.ImVec2(im.CalcTextSize(shown).x, 0)) then
     editKey, editBuf, editFrames = key, im.FloatPtr(settings[key]), 0
   end
-  if im.IsItemHovered() then im.SetTooltip('Click to type a value') end
+  -- only while it can be clicked (not on a greyed-out slider)
+  if im.IsItemHovered() then im.SetTooltip("Click to type a value, even beyond the slider's range") end
   return false
 end
 
@@ -248,11 +294,13 @@ local function labSlider(label, key, low, high, unit)
     settings[key] = clamp(ptr[0], low, high)
     now = true
   end
+  tip(LAB_TIPS[key])
   im.PopItemWidth()
   im.SameLine()
   if editableValue(key, ptr, unit.value) then now = true end
   im.SameLine()
   if im.SmallButton(unit.reset(defaults[key]) .. '##reset' .. key) then ptr[0] = defaults[key]; settings[key] = defaults[key]; now = true end
+  tip('Back to the default value (' .. unit.reset(defaults[key]) .. ')')
   if now then changed(key) end
   return now
 end
@@ -261,6 +309,7 @@ end
 local function labSwitch(label, key)
   local ptr = labWidgets[key]
   if im.Checkbox(label .. '##' .. key, ptr) then settings[key] = ptr[0]; changed(key) end
+  tip(LAB_TIPS[key])
   return ptr[0]
 end
 
@@ -271,22 +320,23 @@ local function labChoices(key, choices)
       settings[key] = c.id
       changed(key)
     end
+    tip(c.tip)
   end
 end
 
 -- Lab, Impact tab: what a hit does to Sonic
 local IMPACT_MODES = {
-  {id = 'mass', label = 'Sonic loses speed by the mass of the car'},
-  {id = 'plow', label = 'Sonic keeps his speed and plows through'},
-  {id = 'bounce', label = 'Sonic bounces off the car'},
-  {id = 'off', label = "Off: BeamNG's own collision only"},
+  {id = 'mass', label = 'Sonic loses speed by the mass of the car', tip = 'Sonic knocks the car away but loses speed by its weight: the heavier the car, the more he slows, and a very heavy one stops him. A higher Impact force makes him lose less.'},
+  {id = 'plow', label = 'Sonic keeps his speed and plows through', tip = "The hit itself takes none of Sonic's speed: he knocks the car away and plows on. How far the car flies depends on Impact force and the car's weight."},
+  {id = 'bounce', label = 'Sonic bounces off the car', tip = "Sonic rebounds off the car, thrown back at more than half his hitting speed, and the car gets a harder shove than in the other modes. Impact force changes only the car's shove."},
+  {id = 'off', label = "Off: BeamNG's own collision only", tip = "No special hit: Sonic and the car just collide through BeamNG's normal physics. Impact force and Car damage do nothing in this mode."},
 }
 
 -- Lab, Jump tab: the jump styles of sonicnative_main (anim.lua tuning.jumpStyle)
 local JUMP_STYLES = {
-  {id = 0, label = 'Ball for the whole jump (no tricks)'},
-  {id = 1, label = 'Ball going up, then tricks or a normal fall after the top of the jump'},
-  {id = 2, label = 'Ball, and a trick when you hold a direction in the air (A, D or S)'},
+  {id = 0, label = 'Ball for the whole jump (no tricks)', tip = 'Sonic stays curled in his spinning ball from take-off until he lands, with no tricks however long the jump. Falling off a ledge without jumping can still play tricks.'},
+  {id = 1, label = 'Ball going up, then tricks or a normal fall after the top of the jump', tip = 'Sonic is a ball on the way up and uncurls once he falls past the top of the jump. After almost a second in the air he does tricks; before that he takes his falling pose.'},
+  {id = 2, label = 'Ball, and a trick when you hold a direction in the air (A, D or S)', tip = 'Sonic stays in his ball the whole jump. Holding left, right or back (A, D or S) in the air plays a trick, then he curls back up; release and press again for another trick.'},
 }
 
 -- Lab, Boost tab: the speed at which the boost effects are at full strength, the O menu's top
@@ -401,6 +451,7 @@ local function drawLab()
   end
   im.Separator()
   if im.Button('Close and save') then w.open[0] = false end
+  tip('Close the Lab and save these settings: they stay for your next games.')
   im.End()
   if not w.open[0] then labOpen = false; saveSettings() end
 end

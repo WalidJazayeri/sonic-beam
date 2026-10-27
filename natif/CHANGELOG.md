@@ -5,6 +5,10 @@ Le mode natif (dossier `natif/`) a ses propres versions : le numéro est dans `n
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## natif-v0.6.1
+- **Infobulles dans le Lab** : en passant la souris sur un réglage, une infobulle explique ce qu'il change en jeu, ce que font les petites et les grandes valeurs, et de quoi il dépend ; elle disparaît dès que la souris s'en va. Les 36 réglages des 9 onglets en ont une (curseurs, cases, choix des onglets Impact et Jump), y compris quand un curseur est grisé, ainsi que les boutons de retour au défaut (qui rappellent la valeur par défaut) et « Close and save ».
+- Les textes, en anglais comme le reste du mod, ont été rédigés d'après ce que le code fait vraiment, puis vérifiés contre le code par d'autres agents (10 corrigés : par exemple le bang supersonique aussi à l'atterrissage en boost, Car damage sans effet si Impact force est à 0, la touche S qui donne la figure vers le haut).
+
 ## natif-v0.6.0
 - **Les caméras de BeamNG marchent avec Sonic à pied.** C les fait défiler comme en voiture : la caméra de Sonic, puis Orbite, Extérieure, Drone et Vue du dessus, dans l'ordre de la liste Options > Caméras et seulement celles qui y sont cochées. Les touches 1 à 0 en choisissent une directement, même décochée, comme en voiture. Le nom s'affiche en haut à gauche comme pour une voiture (« Sonic Camera » pour la sienne), et aussi en sortant d'une voiture. La vue choisie est gardée entre les trajets en voiture.
 - À pied, BeamNG n'affiche que la caméra à la première personne de son piéton : la caméra de Sonic fait donc tourner elle-même les caméras de BeamNG du corps de marche. Poursuite, relative et conducteur sont laissées de côté : accrochées au corps, qui se tourne vers la caméra, elles le feraient tourner sans fin.
