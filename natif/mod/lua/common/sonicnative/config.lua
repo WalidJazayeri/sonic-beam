@@ -74,6 +74,15 @@ M.camera = {
   followRate = 2.5,           -- 1/s
   mouseSpeed = 7,
   wallMargin = 0.3,           -- m
+  -- native only: BeamNG's cameras of the walking body that C (or 1-0) brings into Sonic's camera on
+  -- foot, after his own view, in the order and on/off state of the player's Options > Cameras list.
+  -- chase, relative and driver are left out: they hang on the walking body, which turns toward the
+  -- camera, so with controls that follow the camera they would spin it without end
+  footCameras = {'orbit', 'droneChase', 'external', 'topDown'},
+  -- native only: the direction held is sent in this many steps of a turn. In BeamNG's cameras a held
+  -- direction keeps its course; releasing it, or turning it 2 steps or more (45 degrees), takes
+  -- "forward" from the view on screen again
+  stickSteps = 16,
 }
 
 -- The settings the body starts with: the overlay's defaults, from the settings table of its GE

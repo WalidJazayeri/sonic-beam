@@ -571,16 +571,19 @@ local function updateGFX(dt)
   lastGrounded = grounded
   local onGround = grounded and 1 or 0
   local wantsMove = amount > 0.1 and 1 or 0
+  -- the direction held (0 = forward, then clockwise, in config.camera.stickSteps steps): in BeamNG's
+  -- cameras, turning it takes "forward" from the view on screen again
+  local stick = wantsMove == 1 and math.floor(math.atan2(walkX, walkY) / (2 * math.pi) * config.camera.stickSteps + 0.5) % config.camera.stickSteps or 0
   local wall = wallApproach and 0 or wallState   -- running at the wall is still running
   -- the ground under him, for the footstep and landing sounds: on the water it is the water
   local ground = waterState ~= 0 and 'watr' or groundKey()
   debugInfo.ground, debugInfo.material = ground, groundMaterial or -1
-  local key = boosting + 2 * onGround + 4 * wantsMove + 8 * airInput + 32 * waterState + 128 * wall + 512 * (groundIndex[ground] or 0)
+  local key = boosting + 2 * onGround + 4 * wantsMove + 8 * airInput + 32 * waterState + 128 * wall + 512 * (groundIndex[ground] or 0) + 4096 * stick
   relayTimer = relayTimer - dt
   if key ~= relayKey or jumpsToReport > 0 or relayTimer <= 0 then
     relayKey, relayTimer = key, 1 / config.relay.hz
-    obj:queueGameEngineLua(string.format("if sonicnative_body then sonicnative_body.onRunner(%d, %d, %d, %d, %d, %d, %d, %.3f, %.3f, %.3f, '%s') end",
-      boosting, jumpsToReport, onGround, wantsMove, airInput, waterState, wall, wallN.x, wallN.y, wallN.z, ground))
+    obj:queueGameEngineLua(string.format("if sonicnative_body then sonicnative_body.onRunner(%d, %d, %d, %d, %d, %d, %d, %.3f, %.3f, %.3f, '%s', %d) end",
+      boosting, jumpsToReport, onGround, wantsMove, airInput, waterState, wall, wallN.x, wallN.y, wallN.z, ground, stick))
     jumpsToReport = 0
   end
 end

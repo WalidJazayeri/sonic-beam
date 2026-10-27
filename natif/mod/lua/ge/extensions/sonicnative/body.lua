@@ -3,7 +3,7 @@
 -- each map on foot, loads Sonic's runner into BeamNG's walking body (vehicle extension
 -- sonicnative_runner), hands it its settings and the water level under it, sweeps Sonic's path
 -- through nearby vehicles (vehicle extension sonicnative_impact) and puts the camera behind him
--- (camera mode sonicnativeChase). It draws nothing: the visual module reads M.getState() and
+-- (camera mode sonicnativeChase), where C goes through BeamNG's own cameras too. It draws nothing: the visual module reads M.getState() and
 -- M.getBody(). Same behaviour as the overlay's GE extension (beamng/mod/lua/ge/extensions,
 -- sonic.lua, v0.12.3) without its renderer link, rings, menus, settings file and sounds (the O
 -- menu and the settings file are sonicnative_menu's, which calls M.setSettings and M.unstuck). It
@@ -15,6 +15,7 @@ local logTag = 'sonicnative'
 local config = require('sonicnative/config')
 local P = config.physics
 local U = config.unstuck
+local K = config.camera
 
 -- the overlay's defaults; M.setSettings changes them live (sonicnative_menu: the player's saved
 -- settings at start, then the O menu and the Lab)
@@ -32,7 +33,7 @@ local clock = 0
 local bodyFeet, bodyVel = nil, vec3()
 local groundedByRay = false
 -- what the runner inside the walking body last told us (onRunner)
-local runner = {boost = 0, grounded = 0, wantsMove = 0, airInput = 0, water = 0, wall = 0, wallN = vec3(0, 0, 1), jumps = 0, surface = 'conc'}
+local runner = {boost = 0, grounded = 0, wantsMove = 0, airInput = 0, water = 0, wall = 0, wallN = vec3(0, 0, 1), jumps = 0, surface = 'conc', stick = 0}
 local groundKeys = {}             -- the ground keys the runner may send (config.ground)
 for _, k in ipairs(config.ground.keys) do groundKeys[k] = true end
 local carMass = {}                -- vehicle id -> kg (reported by the vehicle's sonicnative_impact)
@@ -45,7 +46,7 @@ local sentWaterZ = false          -- last water height sent to the body
 local safeSpots = {}              -- recent spots where Sonic stood upright, for Unstuck: {pos, yaw}
 -- for the visual module: the same table on every M.getState() call, refreshed each frame
 local state = {active = false, boosting = false, airborne = false, grounded = false, speedKmh = 0, onWater = false, onWall = false,
-  water = 0, wall = 0, wallNormal = vec3(0, 0, 1), wantsMove = false, airInput = 0, jumps = 0, surface = 'conc'}
+  water = 0, wall = 0, wallNormal = vec3(0, 0, 1), wantsMove = false, airInput = 0, jumps = 0, surface = 'conc', stick = -1}
 
 local down = vec3(0, 0, -1)
 
@@ -53,6 +54,7 @@ local function resetRunner()
   runner.boost, runner.grounded, runner.wantsMove, runner.airInput, runner.water, runner.wall = 0, 0, 0, 0, 0, 0
   runner.wallN = vec3(0, 0, 1)
   runner.surface = 'conc'
+  runner.stick = 0
 end
 
 -- the water surface at x, y: WaterBlocks cover their box (their surface is at their position's
@@ -253,22 +255,145 @@ local function unstuck()
   return true
 end
 
-local CAMERA_SETTLE = 3           -- seconds after Sonic takes a body during which his camera is re-applied
-local cameraSetAt = -100
+local footView = 'sonic'          -- the view C last picked on foot ('sonic' or one of BeamNG's cameras), kept across car trips
+local slotCamera = nil            -- the walking body's camera a number key just picked (onCameraModeChanged)
+local lastGlobal = nil            -- the global camera active at the end of the last frame
+local announceAt = nil            -- clock at which the view's name shows after Sonic's camera came back
 
+-- (the global camera is read and set on the main view's context: with a player, split-screen gives
+-- player 0's own view, which Sonic's camera does not use)
 local function setSonicCamera(on)
-  if on == cameraActive then
-    -- BeamNG's walking mode resets the global camera while the new walking body settles (map start):
-    -- put Sonic's camera back during that short window, never later (C stays the player's choice)
-    if on and clock - cameraSetAt < CAMERA_SETTLE and core_camera and core_camera.getActiveGlobalCameraName
-        and core_camera.getActiveGlobalCameraName(0) ~= 'sonicnativeChase' then
-      core_camera.setGlobalCameraByName('sonicnativeChase')
-    end
-    return
+  if not core_camera then return end
+  if on then
+    -- BeamNG's walking mode clears the global camera while a new walking body settles (map start),
+    -- and C, the free camera or the big map leave it too: on foot, with no other global camera
+    -- active, Sonic's camera comes back, on the view C last picked
+    local active = core_camera.getActiveGlobalCameraName()
+    if cameraActive and active then return end
+    cameraActive = true
+    if active ~= 'sonicnativeChase' then core_camera.setGlobalCameraByName('sonicnativeChase') end
+    footView = core_camera.globalCameraFunction('sonicnativeChase', 'setView', footView, true) or 'sonic'
+    -- its name, a moment later: getting out of a car, BeamNG shows the name of the walking body's
+    -- own camera, which is not the one on screen
+    announceAt = clock + 0.25
+  elseif cameraActive then
+    cameraActive = false
+    core_camera.setGlobalCameraByName(nil)
   end
-  cameraActive = on
-  if on then cameraSetAt = clock end
-  if core_camera then core_camera.setGlobalCameraByName(on and 'sonicnativeChase' or nil) end
+end
+
+-- The camera keys while Sonic is on foot.
+-- C: BeamNG's walking body binds C to crouching in its own key map, which comes before the game's
+-- camera keys. Sonic never crouches, so that action is filtered out and C reaches BeamNG's "next
+-- camera" (the way BeamNG's ui/missionInfo.lua frees its interact key).
+-- Shift+C: BeamNG's camera group toggle (commands.toggleCamera) is wrapped, the way BeamNG's
+-- gameplay/crawl/utils.lua wraps commands.dropPlayerAtCameraNoReset, so that onCameraToggled knows
+-- the key did it (F7, the big map and others send the same hook)
+local CAMERA_KEY_FILTER = 'sonicnativeCameraKey'
+local cameraKeysOn = false
+local toggleKey = false           -- inside BeamNG's camera group toggle
+local originalToggleCamera = nil
+local function toggleCameraKey(...)
+  toggleKey = true
+  local ok, err = pcall(originalToggleCamera, ...)
+  toggleKey = false
+  if not ok then log('E', logTag, 'camera toggle failed: ' .. tostring(err)) end
+end
+local function setCameraKeys(on)
+  if on == cameraKeysOn then return end
+  cameraKeysOn = on
+  if core_input_actionFilter then
+    core_input_actionFilter.setGroup(CAMERA_KEY_FILTER, on and {'unicycle__crouchToggle'} or {})
+    core_input_actionFilter.addAction(0, CAMERA_KEY_FILTER, on)
+  end
+  if on and not originalToggleCamera and commands and commands.toggleCamera then
+    originalToggleCamera = commands.toggleCamera
+    commands.toggleCamera = toggleCameraKey
+  elseif not on and originalToggleCamera and commands and commands.toggleCamera == toggleCameraKey then
+    -- put back only if still ours; otherwise the wrapper stays a plain pass-through for whoever wrapped it
+    commands.toggleCamera, originalToggleCamera = originalToggleCamera, nil
+  end
+end
+
+-- the views C goes through on foot: Sonic's own, then BeamNG's cameras of the walking body named in
+-- config.camera.footCameras, in the order of the player's Options > Cameras list and only those left
+-- on there
+local function footViews()
+  local views = {'sonic'}
+  local cams = sonicBodyId and core_camera.getCameraDataById(sonicBodyId)
+  if not cams then return views end
+  local wanted = {}
+  for _, name in ipairs(K.footCameras) do wanted[name] = true end
+  for _, c in ipairs(core_camera.getConfigurationReadOnly()) do
+    local cam = cams[c.name]
+    if wanted[c.name] and c.enabled and cam and not cam.hidden then views[#views + 1] = c.name end
+  end
+  return views
+end
+
+-- a camera a number key may show on foot: one of config.camera.footCameras on the walking body, even
+-- if it is off in the Options list (as on a car)
+local function footCameraUsable(name)
+  local cams = sonicBodyId and core_camera.getCameraDataById(sonicBodyId)
+  local cam = cams and cams[name]
+  if not cam or cam.hidden then return false end
+  for _, n in ipairs(K.footCameras) do if n == name then return true end end
+  return false
+end
+
+-- the view on screen (the camera falls back to Sonic's own by itself if a BeamNG camera fails)
+local function shownView()
+  return core_camera.globalCameraFunction('sonicnativeChase', 'getView') or footView
+end
+
+-- its name, the way BeamNG shows a car's camera (Sonic's own: "Sonic")
+local function showViewName(views)
+  local shown = shownView()
+  local index = 1
+  for i, name in ipairs(views) do if name == shown then index = i end end
+  guihooks.trigger('Message', {txt = 'ui.camera.switched', ttl = 5, category = 'cameramode', icon = 'survellianceCamera',
+    context = {name = shown == 'sonic' and 'Sonic' or 'ui.camera.mode.' .. shown},
+    availableOptionsCount = #views, currentOptionIndex = index - 1})
+end
+
+-- C (BeamNG's next camera) or a camera number key, on foot (hook trackCamMode, fired by those
+-- keys): BeamNG only knows its first-person walking camera there, so it just left Sonic's camera.
+-- It comes back at once on the next view of the list, or the one the number key picked, and its
+-- name shows. Previous camera also goes to the next view
+local function onCameraKey()
+  local picked = slotCamera
+  slotCamera = nil
+  local veh = getPlayerVehicle(0)
+  if stopped or not cameraActive or not veh or veh:getId() ~= sonicBodyId then return end
+  -- C and a number key with a camera have left Sonic's camera; still on it (a number key with no
+  -- camera) or on another global camera (the free camera...): nothing to do
+  if core_camera.getActiveGlobalCameraName() then return end
+  local views = footViews()
+  local want = 'sonic'
+  if picked then
+    if footCameraUsable(picked) then want = picked end
+  else
+    local shown = shownView()
+    for i, name in ipairs(views) do if name == shown then want = views[i % #views + 1] end end
+  end
+  core_camera.setGlobalCameraByName('sonicnativeChase')
+  footView = core_camera.globalCameraFunction('sonicnativeChase', 'setView', want) or 'sonic'
+  core_camera.startCameraTransition()
+  announceAt = nil
+  showViewName(views)
+end
+
+-- Shift+C (BeamNG's camera group toggle, hook onCameraToggled) on foot: from Sonic's camera BeamNG
+-- goes back to its game camera, which Sonic's camera replaces at once on foot, so the free camera
+-- could never be reached. Go on to it instead, as a second press did before; from the free camera
+-- the next press comes back to Sonic's camera
+local function onCameraToggled()
+  if not toggleKey then return end
+  local from = lastGlobal
+  lastGlobal = nil   -- entered once only, even if BeamNG has no free camera to go to
+  local veh = getPlayerVehicle(0)
+  if stopped or not cameraActive or from ~= 'sonicnativeChase' or not veh or veh:getId() ~= sonicBodyId then return end
+  if core_camera.getActiveGlobalCameraName() == nil then core_camera.cycleCameraGroup() end
 end
 
 -- hand the walking body back to BeamNG (its own walker, speeds and camera)
@@ -297,6 +422,7 @@ local function updateState(onFoot)
   s.wallNormal = runner.wallN
   s.wantsMove = onFoot and runner.wantsMove == 1  -- stick pushed
   s.airInput = onFoot and runner.airInput or 0    -- direction held in the air: 1 left, 2 right, 3 back
+  s.stick = s.wantsMove and runner.stick or -1    -- direction held, 0 = forward then clockwise in config.camera.stickSteps steps; -1 none
   s.jumps = runner.jumps                          -- jumps since the extension loaded: a change is a new jump
   -- ground under him for the footstep and landing sounds ('conc', 'dirt', 'gras', 'sand', 'snow',
   -- 'watr', 'mtlp'): the last one the ball touched, kept in the air; the water while on it
@@ -304,12 +430,13 @@ local function updateState(onFoot)
 end
 
 -- called by the runner inside the walking body when its state changes, and a few times a second
-local function onRunner(boost, jumps, grounded, wantsMove, airInput, water, wall, nx, ny, nz, surface)
+local function onRunner(boost, jumps, grounded, wantsMove, airInput, water, wall, nx, ny, nz, surface, stick)
   runner.boost, runner.grounded, runner.wantsMove = boost or 0, grounded or 0, wantsMove or 0
   runner.airInput, runner.water, runner.wall = airInput or 0, water or 0, wall or 0
   runner.wallN = vec3(nx or 0, ny or 0, nz or 1)
   runner.jumps = runner.jumps + (jumps or 0)
   runner.surface = groundKeys[surface] and surface or 'conc'
+  runner.stick = stick or 0
 end
 
 local function onPreRender(dtReal)
@@ -339,7 +466,7 @@ local function onPreRender(dtReal)
       runnerLoadedFor = id
       sentWaterZ = false
       sonicBodyId = id
-      cameraSetAt = clock
+      cameraActive = false   -- Sonic's camera and its view set up again on this body
       resetRunner()
       -- Sonic's physics, and the player for his sounds (they follow the body)
       unicycle:queueLuaCommand("extensions.load('sonicnative_runner') extensions.load('sonicnative_sfx') if sonicnative_runner then sonicnative_runner.setEnabled(true) end")
@@ -364,7 +491,14 @@ local function onPreRender(dtReal)
   else
     bodyVel = vec3()
   end
+  slotCamera = nil   -- only read by a camera key's hook, within the same key press
+  setCameraKeys(onFoot)
   setSonicCamera(onFoot)
+  lastGlobal = core_camera and core_camera.getActiveGlobalCameraName()
+  if announceAt and clock >= announceAt then
+    announceAt = nil
+    if onFoot and lastGlobal == 'sonicnativeChase' then showViewName(footViews()) end
+  end
   updateState(onFoot)
 end
 
@@ -375,11 +509,13 @@ local function onClientStartMission()
   notAllowedFor = 0
   safeSpots = {}
   cameraActive = false
+  footView = 'sonic'
   resetRunner()
 end
 
 local function onClientEndMission()
   setSonicCamera(false)
+  setCameraKeys(false)
 end
 
 local function onExtensionLoaded()
@@ -391,6 +527,7 @@ end
 local function onExtensionUnloaded()
   releaseBody()
   setSonicCamera(false)
+  setCameraKeys(false)
   bodyVel = vec3()
   updateState(false)   -- readers of getState() see him off foot, not the last frame's state
 end
@@ -400,6 +537,7 @@ local function onModDeactivated(mod)
     stopped = true
     releaseBody()
     setSonicCamera(false)
+    setCameraKeys(false)
     bodyVel = vec3()
     updateState(false)   -- onPreRender stops refreshing the state from here on
   end
@@ -417,6 +555,9 @@ M.onPreRender = onPreRender
 M.onClientStartMission = onClientStartMission
 M.onClientEndMission = onClientEndMission
 M.onRunner = onRunner
+M.trackCamMode = onCameraKey
+M.onCameraToggled = onCameraToggled
+M.onCameraModeChanged = function(camName) slotCamera = camName end
 M.setCarMass = function(id, kg) carMass[id] = kg end
 M.getLastHit = function() return lastHit end
 -- Sonic's feet and velocity (vec3s; feet is nil until he has been on foot), for the camera and the visual module
