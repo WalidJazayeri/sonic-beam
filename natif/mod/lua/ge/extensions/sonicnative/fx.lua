@@ -40,7 +40,7 @@ local BLUR_SHADER_FILE = 'shaders/sonicnative/speedBlur.cs.hlsl'   -- in this mo
 local SPRITE_KINDS = {'bolt', 'orb', 'glow', 'ring'}
 local RIBBON_KINDS = {'beam', 'locus', 'arc'}
 local AURA_METHODS = {reload = true, skin = true, steps = true}
-local BLUR_BACKENDS = {compute = 'UpscaleDispatch', overlay = 'OverlayRender', motion = false, off = false}
+local BLUR_BACKENDS = {scene = true, compute = 'UpscaleDispatch', overlay = 'OverlayRender', motion = false, off = false}
 local MAX_ERRORS = 8
 
 local sqrt, min, max, abs, floor = math.sqrt, math.min, math.max, math.abs, math.floor
@@ -52,7 +52,7 @@ for k, v in pairs(E.settings) do settings[k] = v end
 
 -- developer switches (M.debug)
 local dbg = {forceKmh = nil, forceBoost = false, freeze = false, bones = false, off = false, burst = false,
-  auraMethod = nil, blurBackend = 'compute', meshMode = 'replace'}
+  auraMethod = nil, blurBackend = 'scene', meshMode = 'replace'}
 
 local warned, errors = {}, {}
 local function report(level, key, msg)
@@ -88,7 +88,10 @@ local bones = nil                 -- {count, names, clips = {name = {frames, loo
 -- the StaticShape's place for a capsule when there are no bone tracks, his feet and his up
 local sharpPose = {ball = false, ballX = 0, ballY = 0, ballZ = 0, ballRadius = E.sharp.ballRadius,
   bonesOk = false, boneX = nil, boneY = nil, boneZ = nil, segments = nil, place = nil,
-  feetX = 0, feetY = 0, feetZ = 0, upX = 0, upY = 0, upZ = 1}
+  feetX = 0, feetY = 0, feetZ = 0, upX = 0, upY = 0, upZ = 1,
+  -- and the aura's shell along his run, handed to sonicnative_shell
+  shell = {amount = 0, texture = nil, feetX = 0, feetY = 0, feetZ = 0, vx = 0, vy = 0, vz = 0, heading = 0,
+    fxRatio = 0, thickness = 1, length = 1, dt = 0, ballGlow = 0, ballX = 0, ballY = 0, ballZ = 0, upX = 0, upY = 0, upZ = 1}}
 
 -- the brightness ladder: level k (1-based) is a quad drawn at alpha a[k]; nearest level in log
 -- space, none below drop
@@ -240,6 +243,14 @@ local function readManifest()
     return false
   end
   fxDef = {version = tonumber(fx.version), materials = dataPath(fx.materials)}
+  -- Frontiers' aura pattern, which the shell's pass reads (converter: tex/ next to the effect materials)
+  local folder = fxDef.materials and fxDef.materials:match('^(.*/)[^/]*$')
+  fxDef.auraTexture = folder and FS:fileExists(folder .. 'tex/sonicnative_fx_aura.dds') and folder .. 'tex/sonicnative_fx_aura.dds' or nil
+  if (fxDef.version or 1) < 2 then
+    -- converter before natif-v0.7.0: the boost flash, shock ring and beam edge are uncompressed DDS that
+    -- BeamNG refuses (they drew as grey squares and a hard-edged beam)
+    report('W', 'oldFxTextures', 'the effects in ' .. DATA .. ' come from an older converter (grey squares at a boost start, flat trail): run the converter again')
+  end
   for _, kind in ipairs(SPRITE_KINDS) do addKind(kind, type(fx.sprites) == 'table' and fx.sprites[kind] or nil) end
   for _, kind in ipairs(RIBBON_KINDS) do addKind(kind, type(fx.ribbons) == 'table' and fx.ribbons[kind] or nil) end
   auraDef = parseAura(fx.aura)
@@ -748,7 +759,7 @@ local spriteCount = 0
 local function sprite(kind, px, py, pz, size, alpha, spin, u0, v0, u1, v1)
   local k = kinds[kind]
   if not (k and k.usable) then return end
-  local lvl = steppedLevel(alpha, E.sprites.levelStep, 0.5)
+  local lvl = steppedLevel(alpha, E.sprites.kindStep[kind] or E.sprites.levelStep, 0.5)
   if lvl == 0 or not k.have[lvl] then return end
   local dx, dy, dz = cam.x - px, cam.y - py, cam.z - pz
   local d = sqrt(dx * dx + dy * dy + dz * dz)
@@ -972,6 +983,7 @@ end
 local function ensureBlur()
   local p = scenetree.findObject(BLUR_NAME)
   if p then return p end
+  -- 'scene': effects.lua's place (before the translucent objects); the others after a bin (developer)
   local bin = BLUR_BACKENDS[dbg.blurBackend]
   if not bin or not ensureShader() then return nil end
   p = createObject('PostEffect')
@@ -979,9 +991,9 @@ local function ensureBlur()
   p.isEnabled = false
   p.allowReflectPass = false
   p.canSave = false
-  p:setField('renderTime', 0, 'PFXAfterBin')
-  p:setField('renderBin', 0, bin)
-  p.renderPriority = E.blur.renderPriority
+  p:setField('renderTime', 0, bin == true and E.blur.renderTime or 'PFXAfterBin')
+  p:setField('renderBin', 0, bin == true and E.blur.bin or bin)
+  p.renderPriority = bin == true and E.blur.renderPriority or (E.blur.fallbackPriority[dbg.blurBackend] or 0.05)
   p:setField('shader', 0, BLUR_SHADER_NAME)
   p:setField('stateBlock', 0, 'PFX_DefaultStateBlock')
   p:setField('texture', 0, '$backBuffer')
@@ -1059,12 +1071,12 @@ end
 
 -- ---------------------------------------------------------------- Sonic's pose, for the sharp motion blur
 
--- the motion blur that keeps Sonic sharp (sonicnative_sharp), when loaded: he is given as he is drawn
--- now (pose nil: not on foot, it gives BeamNG's motion blur back)
-local function sendPose(a)
-  local sharp = loaded('sonicnative_sharp')
-  if not (sharp and type(sharp.update) == 'function') then return end
-  local P = nil
+-- the motion blur that keeps Sonic sharp (sonicnative_sharp), his shadow (sonicnative_shadow) and the
+-- aura's shell (sonicnative_shell), when loaded: he is given as he is drawn now (a nil: not on foot,
+-- they go off)
+local POSE_TAKERS = {'sonicnative_sharp', 'sonicnative_shadow', 'sonicnative_shell'}
+local function sendPose(a, dt)
+  local P, s = nil, nil
   if a then
     P = sharpPose
     P.ball = inputs.hidden
@@ -1075,9 +1087,27 @@ local function sendPose(a)
     local u = a.up
     P.feetX, P.feetY, P.feetZ = feetX, feetY, feetZ
     P.upX, P.upY, P.upZ = u and tonumber(u.x) or 0, u and tonumber(u.y) or 0, u and tonumber(u.z) or 1
+    P.shadowOpacity, P.dt = settings.shadowOpacity, dt or 0
+    s = P.shell
+    -- the overlay's default shape; with Aura follows body shape, the aura meshes on his body instead
+    s.amount = settings.auraBodyShape and 0 or auraAmount
+    s.texture = fxDef and fxDef.auraTexture or nil
+    s.feetX, s.feetY, s.feetZ = feetX, feetY, feetZ
+    local v = type(a.vel) == 'table' and a.vel or {}
+    s.vx, s.vy, s.vz = tonumber(v[1]) or 0, tonumber(v[2]) or 0, tonumber(v[3]) or 0
+    s.heading, s.fxRatio, s.dt = tonumber(a.heading) or 0, inputs.fxRatio, dt or 0
+    s.thickness, s.length = settings.auraThickness, settings.auraLength
+    s.ballGlow, s.ballX, s.ballY, s.ballZ = settings.ballGlow * inputs.ball, P.ballX, P.ballY, P.ballZ
+    s.upX, s.upY, s.upZ = P.upX, P.upY, P.upZ
   end
-  local ok, err = pcall(sharp.update, P)
-  if not ok then report('E', 'sharp', 'the sharp motion blur failed: ' .. tostring(err)) end
+  -- each is called even with nil: that turns it off
+  for _, name in ipairs(POSE_TAKERS) do
+    local e = loaded(name)
+    if e and type(e.update) == 'function' then
+      local ok, err = pcall(e.update, name == 'sonicnative_shell' and s or P)
+      if not ok then report('E', name, name .. ' failed: ' .. tostring(err)) end
+    end
+  end
 end
 
 -- ---------------------------------------------------------------- aura
@@ -1189,7 +1219,8 @@ local function updateAura(dt, o)
   -- off while only the ball shell shows: sonicnative_main hid his meshes, the aura's with them
   -- (it calls M.onSonicMeshesShown when it shows them again)
   auraAmount = inputs.hidden and 0 or auraFade * A.opacity * inputs.fxSpeed * max(0, settings.auraIntensity) * (1 - inputs.ball)
-  applyAura(o, auraAmount)
+  -- on his body only with Aura follows body shape; otherwise sonicnative_shell draws it along his run
+  applyAura(o, settings.auraBodyShape and auraAmount or 0)
 end
 
 -- ---------------------------------------------------------------- light
@@ -1338,7 +1369,7 @@ local function frame(dt, o)
   submit(spriteB)
   if dbg.bones then drawBones(a) end
   -- last: an error above reaches hideAll (sendPose(nil)) before the sharp blur was turned on this frame
-  sendPose(a)
+  sendPose(a, dt)
 end
 
 -- ---------------------------------------------------------------- lifecycle
@@ -1456,7 +1487,7 @@ M.status = function()
     if ok then draws = n end
   end
   local backend = dbg.blurBackend
-  if (backend == 'compute' or backend == 'overlay') and not scenetree.findObject(BLUR_NAME) then backend = backend .. ' (not created)' end
+  if (backend == 'scene' or backend == 'compute' or backend == 'overlay') and not scenetree.findObject(BLUR_NAME) then backend = backend .. ' (not created)' end
   return {
     inputs = {kmh = inputs.kmh, fxSpeed = inputs.fxSpeed, fxRatio = inputs.fxRatio, boosting = inputs.boosting,
       boostKey = inputs.boostKey, lit = inputs.lit, state = inputs.state, ball = inputs.ball, hidden = inputs.hidden},
@@ -1485,7 +1516,7 @@ end
 
 -- Developer switches; a key left out keeps its value, false clears it:
 -- {forceKmh = 600, forceBoost = true, freeze = true, bones = true (debugDrawer spheres), burst = true (one now),
---  auraMethod = 'reload' | 'skin' | 'steps', blurBackend = 'compute' | 'overlay' | 'motion' | 'off',
+--  auraMethod = 'reload' | 'skin' | 'steps', blurBackend = 'scene' | 'compute' | 'overlay' | 'motion' | 'off',
 --  meshMode = 'replace' | 'recreate', off = true, reload = true (manifest read again), resetStats = true}
 M.debug = function(opts)
   if type(opts) ~= 'table' then return M.status() end

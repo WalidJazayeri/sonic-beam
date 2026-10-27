@@ -22,9 +22,14 @@ M.settings = {
   fxBySpeed = true,               -- the trail, lightning and aura grow with Sonic's speed
   fxSpeedAmount = 0.75,           -- share that follows the speed: at a standstill they are at 1 - this
   blurStrength = 1,               -- x the speed blur (Lab 0..2); effects.blur.strength is the shader's own scale
+  auraBodyShape = false,          -- the aura on his body (Frontiers' aura model); off: the shell along his run (M.shell)
+  auraThickness = 1,              -- x the shell's girth (Lab 0..3)
+  auraLength = 1,                 -- x how far the shell streams back (Lab 0..3)
   auraIntensity = 1,              -- x the aura's brightness (Lab 0..2)
   auraLightning = 1,              -- x the bolts on his body (Lab 0..3)
   boostLight = 1,                 -- native only: x the blue light of a boost start (Lab 0..2)
+  shadowOpacity = 0.55,           -- Sonic's shadow (Lab Shadow tab 0..1; overlay sonic.lua settings.shadowOpacity)
+  ballGlow = 1,                   -- x the jump ball's soft blue glow (Lab Jump tab 0..2; overlay settings.ballGlow)
 }
 
 -- Shared by every effect (game.cpp:268-274, 288-289, 531; sonic.lua fxReferenceKmh)
@@ -55,7 +60,13 @@ M.blur = {
   centreMax = 0.75,
   minShown = 0.01,                -- below this blur x blurStrength the effect is off (render11.cpp:443)
   -- native only
-  renderPriority = 0.05,          -- PostEffect order: higher runs first, so after the depth of field (0.1, dof.lua)
+  -- where it runs: before the translucent objects (the trail, the aura's shell, the sprites, drawn
+  -- after it stay sharp, as the overlay drew them over its blur), after BeamNG's fog (priority 5,
+  -- fog.lua) and the sharp motion blur (sharp.renderPriority): higher runs first
+  renderTime = 'PFXBeforeBin', bin = 'ObjTranslucentBin', renderPriority = 2,
+  -- the developer backends (sonicnative_fx.debug blurBackend): after the depth of field (0.1, dof.lua) in
+  -- UpscaleDispatch, before the aura's shell (shell.renderPriority 2) in OverlayRender
+  fallbackPriority = {compute = 0.05, overlay = 2.5},
   motionStrength = 1,             -- 'motion' fallback: PostFxMotionBlur.strength added at full blur [not tested]
 }
 
@@ -72,6 +83,60 @@ M.aura = {
   methods = {'reload', 'skin', 'steps'},   -- tried in this order: material reload, skin ladder, mesh steps
   reloadMaxMs = 0.5,              -- ms, a material reload slower than this moves on to the skin ladder (plan_fx 5)
   steps = {0.4, 0.75},            -- 'steps': below the first only the halo shows, below the second only the inner layer
+}
+
+-- The aura's shell along his run, the overlay's default aura shape (game.cpp:650-668, assets.cpp dome,
+-- shared_draw.hpp psAura; lua/ge/extensions/sonicnative/shell.lua, shaders/sonicnative/shell.cs.hlsl).
+-- Its brightness is the aura's amount above. size = sizeBase + sizeThickness * auraThickness;
+-- R = radius * height * size, N = nose * R; base = feet + up * chest * height + run * (ahead * height *
+-- size - N); tail = (tailBase + tailSpeed * fx_ratio) * height * auraLength
+M.shell = {
+  height = 1.0,                   -- m, Sonic's height (tuning.json sonicHeightMeters)
+  sizeBase = 0.8, sizeThickness = 0.25,
+  radius = 0.62,                  -- x height x size: the shell's radius across the run
+  nose = 0.75,                    -- x radius: how far the round nose reaches ahead of its base
+  chest = 0.5,                    -- x height above his feet
+  ahead = 0.45,                   -- x height x size: the nose's tip ahead of his chest
+  tailBase = 1.0, tailSpeed = 2.2,
+  minSpeed = 1.5,                 -- m/s: slower, it lies along his heading instead of his velocity
+  clockBase = 0.6, clockSpeed = 2.2,   -- the pattern streams back at (clockBase + clockSpeed * fx_ratio) per second
+  colour = {0.04, 0.28, 1.0},     -- gamma (sheets: the aura colour)
+  outerScale = 1.27,              -- the outer layer's size (shared_draw.hpp kDomeScale[2])
+  -- the jump ball's glow, drawn by the same pass (game.cpp 422-424): alpha min(1, ballGlowShare * ballGlow * ball)
+  ballGlowSize = 1.7,             -- m across
+  ballGlowShare = 0.5,
+  ballGlowColour = {0.45, 0.75, 1.0},   -- gamma (shared_draw.hpp sprite colour)
+  -- native only
+  margin = 2.5,                   -- m: the scene hides a point of the shell only when this much nearer (walls, cars; not the ground under him)
+  body = {bottom = 0.32, length = 0.75, radius = 0.3},   -- x height: his body's capsule, which hides the shell behind him (overlay: his depth); clear of the ground under his feet
+  minShown = 0.01,                -- the pass is off below this brightness
+  bin = 'OverlayRender', renderTime = 'PFXAfterBin', renderPriority = 2,   -- after the tonemapper and both motion blurs
+  addMode = 1,                    -- 1: the image there is linear (an sRGB view), added in gamma as the overlay added display values (seen in game); 0: added as it is
+}
+
+-- Sonic's shadow (game.cpp:446-481, tuning.json shadow*, overlay sonic.lua readGround / readSun;
+-- lua/ge/extensions/sonicnative/shadow.lua, shaders/sonicnative/shadow.cs.hlsl). fade = 1 - height /
+-- fadeMeters; sunUp = clamp((sun's sine - sunMin) / sunRamp): in the sun his silhouette at opacity * fade
+-- * sunUp (none on a wall), else a blob at opacity * fade * (1 - sunUp) * blobShare
+M.shadow = {
+  fadeMeters = 3.0,               -- m above the ground at which it has faded out (shadowFadeMeters)
+  sunMin = 0.12, sunRamp = 0.15,  -- sun's sine below which only the blob shows (shadowSunMin), and the blend's width
+  blobShare = 0.8,                -- the blob's share of the opacity
+  blobRadius = 0.42,              -- m (game.cpp: a quad of +-0.42 m, (1 - r)^2)
+  sunEvery = 1,                   -- s between two readings of the sun
+  rayRange = 50, rayStart = 0.5,  -- m: rays down from this high above his feet, this far
+  normalSpread = 0.45,            -- m: the three rays for the ground's slope, around him
+  minNormalZ = 0.2,               -- a steeper ground counts as flat (game.cpp)
+  -- native only
+  gamma = 2.2,                    -- the overlay darkened display values: (1 - alpha)^gamma on the linear frame
+  coneScale = 0.85,               -- x the sharp blur's cone radii (they are generous)
+  maskMargin = 0.08,              -- m around the bare cones within which a pixel is his, not shadowed (his shoes, gloves and ears poke out by up to ~7-12 cm)
+  penumbra = 0.02, penumbraGrowth = 0.03,   -- m, and m per metre between him and the shadow
+  height = 1.0,                   -- m: his height, for how far the shadow reaches with a low sun
+  reach = 10,                     -- m: no farther than this
+  boundExtra = 1.5,               -- m around his feet added to that reach
+  minShown = 0.005,
+  bin = 'ObjTranslucentBin', renderPriority = 1,   -- PFXBeforeBin: before the trail, the aura and the sprites, after both blurs (it stays sharp)
 }
 
 -- Bolts on his body, riding his bones (game.cpp:600-626): level = fade * fx_speed * auraLightning * (1 - ballAmount)
@@ -113,7 +178,7 @@ M.trail = {
   -- boost on Gridmap V2: all 24 levels 23-26 fps, every 4th 46, every 6th 54, every 8th 62 (199 without
   -- the effects); 6 looks like 1
   levelStep = 6,
-  beam = {width = 1.3, alpha = 0.75},                 -- x width, x min(1, intensity) (game.cpp:585)
+  beam = {width = 1.3, alpha = 0.9},                  -- x width, x min(1, intensity) (game.cpp:585: 0.75; native 0.9: it is blended in linear light, then tonemapped)
   locus = {vScale = 3, vSpeed = 2.5},                 -- v = along / vScale - now * vSpeed (game.cpp:586)
   arc = {width = 0.6, alpha = 0.9, maxLightning = 1.5, vScale = 2,   -- game.cpp:587
     reroll = 0.07,                -- s between two strikes: a new column and jitter (game.cpp:539-543)
@@ -146,7 +211,8 @@ M.burst = {
 -- scaled to keep its size on screen) so Sonic and the ground do not cut it. To tune in game.
 M.sprites = {cameraPull = {bolt = 0.25, orb = 0.3, glow = 1.5, ring = 1.5},
   maxCount = 128,                 -- bolts and orbs alive at most (a few dozen at the most in the overlay's numbers)
-  levelStep = 6}                  -- every n-th brightness level only, the nearest (trail.levelStep: fewer parts)
+  levelStep = 6,                  -- every n-th brightness level only, the nearest (trail.levelStep: fewer parts)
+  kindStep = {glow = 1, ring = 1}}  -- but every level for the boost flash: it fades in 0.45 s, steps showed as flicker
 
 -- native only: the blue light of a boost start, like Frontiers' plight01 (pow_boost_impact)
 M.light = {colour = {0.25, 0.55, 1.0}, radius = 8, peak = 6000, castShadows = false}   -- peak in lumens [not tested]
@@ -176,7 +242,9 @@ M.sharp = {
   groundClear = 0.02,             -- m above the plane through his feet (square to his up) a pixel must be to be his: the ground stays blurred
   bound = 1.6,                    -- m from his middle (feet + capsule.up) beyond which no pixel is his
   ballRadius = 0.3,               -- m, the ball shell's radius when the manifest has none
-  renderPriority = 1.5,           -- PostEffect order; BeamNG's motion blur runs at 1 in the same bin (PFXBeforeBin OverlayRender)
+  -- where it runs: before the translucent objects (the trail and the effects stay sharp, as the
+  -- overlay drew them over BeamNG's finished frame), after BeamNG's fog (5); before the speed blur (2)
+  renderTime = 'PFXBeforeBin', bin = 'ObjTranslucentBin', renderPriority = 3,
   -- the rounded cones: from a bone of the converter's tracks toward another, the radius at each end
   -- (model metres, x Sonic's scale) and how far it goes, in lengths between the two bones (1: to
   -- the second; more: past it, for the quills and the fingers beyond their bones). At most

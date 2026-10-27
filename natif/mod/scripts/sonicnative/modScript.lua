@@ -1,7 +1,8 @@
 -- SPDX-License-Identifier: MIT
 -- Sonic Beam, native mode: runs when the sonicnative mod is active. Loads Sonic's scene object
 -- (sonicnative_main), then his body (sonicnative_body), his sounds (sonicnative_sound), his boost
--- effects (sonicnative_fx), the motion blur that keeps him sharp (sonicnative_sharp) and the O menu
+-- effects (sonicnative_fx), the motion blur that keeps him sharp (sonicnative_sharp), the aura's shell
+-- (sonicnative_shell), his shadow (sonicnative_shadow) and the O menu
 -- (sonicnative_menu, which loads the player's settings) when those files are there.
 -- The unload mode is set before each load: initDB warns about an extension loaded without it.
 setExtensionUnloadMode('sonicnative_main', 'manual')
@@ -64,6 +65,19 @@ if not sharpLoaded then
       if enabled then mb:enable() end
     end
   end)
+end
+
+-- the aura's shell along Sonic's run and his shadow, fed by the boost effects
+for _, part in ipairs({{'shell', 'the boost aura has no shell'}, {'shadow', 'Sonic casts no shadow'}}) do
+  local file = '/lua/ge/extensions/sonicnative/' .. part[1] .. '.lua'
+  local name = 'sonicnative_' .. part[1]
+  if FS:fileExists(file) then
+    setExtensionUnloadMode(name, 'manual')
+    local ok, err = pcall(extensions.load, name)
+    if not ok then log('E', 'sonicnative', 'cannot load ' .. name .. ': ' .. tostring(err)) end
+  else
+    log('W', 'sonicnative', file .. ' not found: ' .. part[2])
+  end
 end
 
 -- the O menu, the Lab and Unstuck, last: it hands the player's saved settings to the others

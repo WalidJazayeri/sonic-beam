@@ -335,7 +335,8 @@ std::string manifest_json(const Package &p, const Options &o, const std::string 
             if (kind->grid_u) list += ", \"grid\": [" + std::to_string(kind->grid_u) + ", " + std::to_string(kind->grid_v) + "]";
             list += "}";
         }
-        s += ",\n  \"fx\": {\"version\": 1, \"materials\": " + json_escape(vfs(p, kFxMaterialsFile)) + ",\n    \"alphas\": [" + alphas + "],\n" +
+        // fx version 2: the computed textures (glow, ring, beam) are PNG; version 1 wrote uncompressed DDS BeamNG refuses
+        s += ",\n  \"fx\": {\"version\": 2, \"materials\": " + json_escape(vfs(p, kFxMaterialsFile)) + ",\n    \"alphas\": [" + alphas + "],\n" +
              "    \"sprites\": {" + sprites + "},\n    \"ribbons\": {" + ribbons + "}";
         if (p.with_aura) {
             std::string meshes, materials, alpha;
@@ -390,7 +391,7 @@ bool write_package(const fs::path &data, const fs::path &cache, const Package &p
     const size_t stale = remove_stale(dir, widen(p.stem + "_"), {L".dae", L".cdae", L".cs"}) +
                          remove_stale(dir, widen(std::string(kBallStem) + "_"), {L".dae", L".cdae"}) +
                          remove_stale(dir, widen(std::string(kBonesStem) + "_"), {L".json"}) +
-                         remove_stale(dir / L"tex", L"sonicnative_", {L".dds"});
+                         remove_stale(dir / L"tex", L"sonicnative_", {L".dds", L".png"});
     std::vector<const char *> unused;
     if (!p.with_ball) { unused.push_back(kBallMaterialsFile); unused.push_back(kBallDatablocksFile); }
     if (!p.with_fx) unused.push_back(kFxMaterialsFile);
@@ -710,7 +711,9 @@ void prepare_fx(const Options &o, const frontiers::Pac &pac, Package &p)
     else std::printf("  warning: %s: %s: the effects drawn with its textures are left out\n", narrow(archive).c_str(), error.c_str());
     std::string json;
     for (const sonic_data::FxKind &kind : sonic_data::kFxKinds) {
-        const std::string file = std::string("tex/sonicnative_fx_") + kind.kind + ".dds";
+        // Frontiers' compressed textures stay DDS; the ones computed here are PNG (BeamNG refuses uncompressed DDS)
+        const bool computed = kind.made != sonic_data::FxMade::copy || (kind.entry == sonic_data::kLocusEntry && o.locus_fallback);
+        const std::string file = std::string("tex/sonicnative_fx_") + kind.kind + (computed ? ".png" : ".dds");
         TextureOut t;
         t.file = file;
         std::string how;
@@ -727,22 +730,26 @@ void prepare_fx(const Options &o, const frontiers::Pac &pac, Package &p)
         }
         if (kind.made == sonic_data::FxMade::beam) {
             t.bytes = beam_texture();
-            how = "computed (soft edge), B8G8R8A8 256x4";
+            how = "computed (soft edge), RGBA8 PNG 256x4";
         } else if (kind.made == sonic_data::FxMade::copy && kind.entry == sonic_data::kLocusEntry && o.locus_fallback) {
             t.bytes = locus_fallback_texture();
-            how = std::string("computed streaks (--locus-fallback, not ") + kind.entry + "), B8G8R8A8 256x256";
+            how = std::string("computed streaks (--locus-fallback, not ") + kind.entry + "), RGBA8 PNG 256x256";
         } else if (kind.made == sonic_data::FxMade::copy) {
-            t.bytes.assign(entry->data, entry->data + entry->size);
-            char b[96];
-            std::snprintf(b, sizeof(b), "%s %ux%u, %u mip(s), copied as is", info.dxgi == 95 ? "BC6H_UF16" : info.dxgi == 96 ? "BC6H_SF16" : dxgi_name(info.dxgi),
-                          info.width, info.height, info.mips);
+            // read as sRGB where the kind says so (its header only): the GPU then gives t^2.2, as the overlay used t
+            uint32_t from = 0, to = 0;
+            std::string serr;
+            const bool srgb = kind.srgb && dds_srgb(entry->data, entry->size, t.bytes, from, to, serr);
+            if (!srgb) t.bytes.assign(entry->data, entry->data + entry->size);
+            char b[128];
+            std::snprintf(b, sizeof(b), "%s %ux%u, %u mip(s), %s", info.dxgi == 95 ? "BC6H_UF16" : info.dxgi == 96 ? "BC6H_SF16" : dxgi_name(info.dxgi),
+                          info.width, info.height, info.mips, srgb ? "copied, read as sRGB" : kind.srgb ? "copied as is (no sRGB variant)" : "copied as is");
             how = std::string(kind.entry) + " " + b;
         } else {
             std::vector<float> mask;
             if (!bc5_mask(info, mask, error)) { std::printf("  warning: %s left out (%s: %s)\n", kind.kind, kind.entry, error.c_str()); continue; }
             const bool ring = kind.made == sonic_data::FxMade::ring;
             t.bytes = flash_texture(mask, info.width, info.height, ring);
-            how = std::string(kind.entry) + (ring ? " -> shock ring" : " -> flash glow") + " baked from its mask, B8G8R8A8 256x256";
+            how = std::string(kind.entry) + (ring ? " -> shock ring" : " -> flash glow") + " baked from its mask, RGBA8 PNG 256x256";
         }
         std::printf("  %-6s %-32s %s\n", kind.kind, file.c_str(), how.c_str());
         json += (json.empty() ? "" : ",\n") + effect_kind_materials(kind, vfs(p, file));

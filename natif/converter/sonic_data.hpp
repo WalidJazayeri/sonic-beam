@@ -134,6 +134,9 @@ constexpr float kSparkColour[3] = {0.45f, 0.75f, 1.0f};   // bolts, orbs, flash 
 constexpr float kLocusColour[3] = {0.3f, 0.65f, 1.0f};
 constexpr float kArcColour[3] = {0.5f, 0.8f, 1.0f};
 constexpr float kBeamColour[3] = {0.08f, 0.38f, 1.0f};
+// native only: the beam blended in linear light then tonemapped came out darker and greyer than the overlay's
+// (game.cpp 585 over the finished image); this colour brings it back (natif-v0.7.0, fitted over three grounds)
+constexpr float kBeamColourNative[3] = {0.2f, 0.48f, 1.0f};
 constexpr float kAuraColour[3] = {0.04f, 0.28f, 1.0f};
 constexpr float kGamma = 2.2f;
 
@@ -163,29 +166,36 @@ constexpr AuraLayer kAuraLayers[] = {
 // tuning.json auraOpacity: the base materials show the aura at this level (full aura, before speed and Lab).
 constexpr float kAuraOpacity = 0.9f;
 
-// psFlat modes 2 and 3 (shared_draw.hpp): the flash glow and shock ring add output(c (1 + 0.5 s)) * s * detail,
-// in linear light c_lin (1 + 0.5 s)^2.2 * s * detail, at most 1.5^2.2 * (0.55 + 0.9) = 3.538. Their textures hold
-// (1 + 0.5 s)^2.2 * s * detail divided by that, their materials multiply it back.
-constexpr float kFlashPeak = 3.538f;
+// psFlat modes 2 and 3 (shared_draw.hpp): the flash glow and shock ring add output(c (1 + 0.5 s)) * saturate(s * detail),
+// in linear light c_lin (1 + 0.5 s)^2.2 * min(1, s * detail), at most 1.5^2.2 = 2.44. Their textures hold that divided
+// by the peak, their materials multiply it back.
+constexpr float kFlashPeak = 2.44f;
 // psFlat mode 4 (bolts, orbs, locus, arcs) adds output(c (0.6 + 0.8 t)) * saturate(1.5 a max(t)): in linear light
 // c_lin (0.6 + 0.8 t)^2.2 * 1.5 a t, 1.5 to 3.1 times c_lin a t on bright texels (2.1 at t = 1 when a = 1, where
 // the alpha clamps), under 1 on faint ones. A material is linear in t (c_lin gain a t): one gain, for the bright cores.
 constexpr float kAddGain = 2.0f;
+// native only: the BC7 effect textures (bolts, orbs, arcs) are read as sRGB, so the GPU gives t^2.2 like the
+// overlay's display-space t. That keeps t = 1 at 1 and darkens the mid-tones: 2.1 (= 1.4^2.2, the overlay's
+// core above) matches the cores, 3 keeps the mid-tones (t 0.5 to 0.7) nearer the overlay's (natif-v0.7.0)
+constexpr float kAddGainSrgb = 3.0f;
 
 // One kind of effect quad: Lua draws sprites (camera-facing quads) and ribbons (the trail) with the materials
 // sonicnative_fx_<kind>_<level>. made: its texture is copied from an archive (copy), baked from a Frontiers mask
 // (glow, ring) or computed (beam). grid: tiles across and down its texture (0: one image).
 enum class FxMade { copy, glow, ring, beam };
-struct FxKind { const char *kind; bool ribbon; FxMade made; bool effect_archive; const char *entry; const float *colour; float gain; bool lerp; int grid_u, grid_v; };
+// srgb: a copied BC7 texture read as sRGB (its header switched to the _SRGB format). glow: BeamNG's glow buffer
+// (its bloom halo); the overlay had none, the beam is kept out of it.
+struct FxKind { const char *kind; bool ribbon; FxMade made; bool effect_archive; const char *entry; const float *colour; float gain; bool lerp; int grid_u, grid_v; bool srgb; bool glow; };
 constexpr FxKind kFxKinds[] = {
-    {"bolt",  false, FxMade::copy, true,  kBoltEntry,  kSparkColour, kAddGain,   false, 4, 4},
-    {"orb",   false, FxMade::copy, true,  kOrbEntry,   kSparkColour, kAddGain,   false, 0, 0},
-    {"glow",  false, FxMade::glow, true,  kGlowEntry,  kSparkColour, kFlashPeak, false, 0, 0},
-    {"ring",  false, FxMade::ring, true,  kRingEntry,  kSparkColour, kFlashPeak, false, 0, 0},
+    {"bolt",  false, FxMade::copy, true,  kBoltEntry,  kSparkColour,      kAddGainSrgb, false, 4, 4, true,  true},
+    {"orb",   false, FxMade::copy, true,  kOrbEntry,   kSparkColour,      kAddGainSrgb, false, 0, 0, true,  true},
+    {"glow",  false, FxMade::glow, true,  kGlowEntry,  kSparkColour,      kFlashPeak,   false, 0, 0, false, true},
+    {"ring",  false, FxMade::ring, true,  kRingEntry,  kSparkColour,      kFlashPeak,   false, 0, 0, false, true},
     // the beam is alpha blended, not added, so it stays blue on a bright ground (game.cpp 585, psFlat mode 5)
-    {"beam",  true,  FxMade::beam, false, nullptr,     kBeamColour,  1.0f,       true,  0, 0},
-    {"locus", true,  FxMade::copy, false, kLocusEntry, kLocusColour, kAddGain,   false, 0, 0},
-    {"arc",   true,  FxMade::copy, true,  kArcEntry,   kArcColour,   kAddGain,   false, 4, 1},
+    {"beam",  true,  FxMade::beam, false, nullptr,     kBeamColourNative, 1.0f,         true,  0, 0, false, false},
+    // locus01 is BC6H, which has no sRGB variant: read linear, its gain unchanged
+    {"locus", true,  FxMade::copy, false, kLocusEntry, kLocusColour,      kAddGain,     false, 0, 0, false, true},
+    {"arc",   true,  FxMade::copy, true,  kArcEntry,   kArcColour,        kAddGainSrgb, false, 4, 1, true,  true},
 };
 
 // Joints the lightning on Sonic's body sits on (overlay: any joint, game.cpp 600-626; here a fixed set). Their

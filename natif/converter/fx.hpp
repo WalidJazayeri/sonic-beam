@@ -22,41 +22,54 @@ namespace sonicnative {
 
 // ---- textures ----
 
-// An uncompressed B8G8R8A8_UNORM DDS (legacy header, the layout frontiers::parse_dds reads back) from w x h
-// RGBA texels in 0..1, with box-filtered mips down to 1x1. w and h are powers of two.
-inline std::vector<uint8_t> dds_bgra8(uint32_t w, uint32_t h, std::vector<float> rgba)
+// An 8-bit RGBA PNG from w x h RGBA texels in 0..1 (BeamNG makes the mips). Not a DDS: BeamNG 0.40 refuses
+// uncompressed DDS ("DDSFile::readHeader - only RGB formats are supported"), so those textures never loaded
+// and the quads drawing them showed as plain grey squares. Stored (uncompressed) deflate blocks: no zlib needed.
+inline std::vector<uint8_t> png_rgba8(uint32_t w, uint32_t h, const std::vector<float> &rgba)
 {
-    uint32_t mips = 1;
-    for (uint32_t s = std::max(w, h); s > 1; s >>= 1) ++mips;
-    std::vector<uint8_t> out(128, 0);
-    auto put = [&](size_t at, uint32_t v) { std::memcpy(out.data() + at, &v, 4); };
-    std::memcpy(out.data(), "DDS ", 4);
-    put(4, 124);
-    put(8, 0x1 | 0x2 | 0x4 | 0x8 | 0x1000 | 0x20000);     // caps, height, width, pitch, pixel format, mip count
-    put(12, h); put(16, w); put(20, w * 4); put(28, mips);
-    put(76, 32); put(80, 0x41);                             // pixel format: RGB + alpha
-    put(88, 32); put(92, 0x00ff0000); put(96, 0x0000ff00); put(100, 0x000000ff); put(104, 0xff000000);
-    put(108, 0x1000 | 0x8 | 0x400000);                      // texture, complex, mipmap
-    auto byte = [](float v) { return uint8_t(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f)); };
-    uint32_t mw = w, mh = h;
-    for (uint32_t m = 0; m < mips; ++m) {
-        for (size_t i = 0; i < size_t(mw) * mh; ++i) {
-            const float *c = &rgba[i * 4];
-            out.push_back(byte(c[2])); out.push_back(byte(c[1])); out.push_back(byte(c[0])); out.push_back(byte(c[3]));
-        }
-        if (m + 1 == mips) break;
-        const uint32_t nw = std::max(1u, mw / 2), nh = std::max(1u, mh / 2);
-        const uint32_t sx = mw > 1 ? 2 : 1, sy = mh > 1 ? 2 : 1;
-        std::vector<float> next(size_t(nw) * nh * 4, 0.0f);
-        for (uint32_t y = 0; y < nh; ++y)
-            for (uint32_t x = 0; x < nw; ++x)
-                for (uint32_t dy = 0; dy < sy; ++dy)
-                    for (uint32_t dx = 0; dx < sx; ++dx)
-                        for (int c = 0; c < 4; ++c)
-                            next[(size_t(y) * nw + x) * 4 + c] += rgba[(size_t(y * sy + dy) * mw + x * sx + dx) * 4 + c] / float(sx * sy);
-        rgba.swap(next);
-        mw = nw; mh = nh;
+    uint32_t table[256];
+    for (uint32_t n = 0; n < 256; ++n) {
+        uint32_t c = n;
+        for (int k = 0; k < 8; ++k) c = c & 1 ? 0xedb88320u ^ (c >> 1) : c >> 1;
+        table[n] = c;
     }
+    std::vector<uint8_t> out = {0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a};
+    auto be32 = [](std::vector<uint8_t> &v, uint32_t x) { for (int s = 24; s >= 0; s -= 8) v.push_back(uint8_t(x >> s)); };
+    auto chunk = [&](const char *type, const std::vector<uint8_t> &data) {
+        be32(out, uint32_t(data.size()));
+        const size_t start = out.size();
+        out.insert(out.end(), type, type + 4);
+        out.insert(out.end(), data.begin(), data.end());
+        uint32_t crc = 0xffffffffu;
+        for (size_t i = start; i < out.size(); ++i) crc = table[(crc ^ out[i]) & 0xff] ^ (crc >> 8);
+        be32(out, crc ^ 0xffffffffu);
+    };
+    std::vector<uint8_t> ihdr;
+    be32(ihdr, w); be32(ihdr, h);
+    ihdr.insert(ihdr.end(), {8, 6, 0, 0, 0});              // 8 bits, RGBA, deflate, no filter method, no interlace
+    chunk("IHDR", ihdr);
+    auto byte = [](float v) { return uint8_t(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f)); };
+    std::vector<uint8_t> raw;                                // each row: filter 0, then the texels
+    raw.reserve(size_t(h) * (1 + size_t(w) * 4));
+    for (uint32_t y = 0; y < h; ++y) {
+        raw.push_back(0);
+        for (uint32_t x = 0; x < w; ++x)
+            for (int c = 0; c < 4; ++c) raw.push_back(byte(rgba[(size_t(y) * w + x) * 4 + c]));
+    }
+    std::vector<uint8_t> z = {0x78, 0x01};                   // zlib header, then stored blocks of at most 65535 bytes
+    uint32_t a = 1, b = 0;
+    for (size_t at = 0; at < raw.size() || at == 0;) {
+        const size_t n = std::min<size_t>(65535, raw.size() - at);
+        z.push_back(at + n >= raw.size() ? 1 : 0);
+        z.push_back(uint8_t(n)); z.push_back(uint8_t(n >> 8));
+        z.push_back(uint8_t(~n)); z.push_back(uint8_t(~n >> 8));
+        for (size_t i = at; i < at + n; ++i) { a = (a + raw[i]) % 65521; b = (b + a) % 65521; z.push_back(raw[i]); }
+        at += n;
+        if (n == 0) break;
+    }
+    be32(z, (b << 16) | a);
+    chunk("IDAT", z);
+    chunk("IEND", {});
     return out;
 }
 
@@ -98,7 +111,7 @@ inline float sample_wrap(const std::vector<float> &m, uint32_t w, uint32_t h, fl
 
 // The boost flash glow (ring false) or shock ring (ring true) of the overlay's psFlat modes 2 and 3, baked:
 //   r = |uv * 2 - 1|, s = (1 - r)^2.5 (glow) or (1 - |r - 0.72| / 0.2)^2 (ring), saturated,
-//   detail = 0.55 + 0.9 * mask(uv * 2, wrap), value = (1 + 0.5 s)^2.2 * s * detail / kFlashPeak,
+//   detail = 0.55 + 0.9 * mask(uv * 2, wrap), value = (1 + 0.5 s)^2.2 * min(1, s * detail) / kFlashPeak,
 // in every channel but alpha (1): the overlay's colour lift (1 + 0.5 s) is inside output(), so linear it is ^2.2.
 // The material multiplies kFlashPeak back.
 inline std::vector<uint8_t> flash_texture(const std::vector<float> &mask, uint32_t mw, uint32_t mh, bool ring, uint32_t size = 256)
@@ -111,11 +124,11 @@ inline std::vector<uint8_t> flash_texture(const std::vector<float> &mask, uint32
             const float s = ring ? std::pow(std::clamp(1 - std::fabs(r - 0.72f) / 0.2f, 0.0f, 1.0f), 2.0f)
                                  : std::pow(std::clamp(1 - r, 0.0f, 1.0f), 2.5f);
             const float detail = 0.55f + 0.9f * sample_wrap(mask, mw, mh, u * 2, v * 2);
-            const float value = std::pow(1 + 0.5f * s, sonic_data::kGamma) * s * detail / sonic_data::kFlashPeak;
+            const float value = std::pow(1 + 0.5f * s, sonic_data::kGamma) * std::min(1.0f, s * detail) / sonic_data::kFlashPeak;
             float *c = &rgba[(size_t(y) * size + x) * 4];
             c[0] = c[1] = c[2] = value; c[3] = 1;
         }
-    return dds_bgra8(size, size, std::move(rgba));
+    return png_rgba8(size, size, rgba);
 }
 
 // The boost beam's soft edge (psFlat mode 5): (1 - |2u - 1|)^1.5 across the ribbon (u), the same along it. In every
@@ -130,7 +143,7 @@ inline std::vector<uint8_t> beam_texture(uint32_t w = 256, uint32_t h = 4)
             float *c = &rgba[(size_t(y) * w + x) * 4];
             c[0] = c[1] = c[2] = c[3] = a;
         }
-    return dds_bgra8(w, h, std::move(rgba));
+    return png_rgba8(w, h, rgba);
 }
 
 // --locus-fallback: soft vertical streaks standing in for Frontiers' locus01 (BC6H) if BeamNG cannot draw that
@@ -162,7 +175,7 @@ inline std::vector<uint8_t> locus_fallback_texture(uint32_t size = 256)
             float *c = &rgba[(size_t(y) * size + x) * 4];
             c[0] = c[1] = c[2] = std::min(1.0f, value); c[3] = 1;
         }
-    return dds_bgra8(size, size, std::move(rgba));
+    return png_rgba8(size, size, rgba);
 }
 
 // ---- the aura shell ----
@@ -219,12 +232,13 @@ inline std::string linear_colour(const float *gamma, float scale)
 
 // An unlit, translucent effect material: black base colour, emissive (display-relative, the same by day and by
 // night: emissiveIgnoreExposure with emissiveIntensityNits 1, so emissiveFactor 1 is about white), into the glow
-// buffer, no depth write, no shadow. blend: AddAlpha (added onto the scene) or LerpAlpha (blended over it).
-inline std::string effect_material(const std::string &name, const std::string &stage, const char *blend, bool double_sided)
+// buffer unless glow is false, no depth write, no shadow. blend: AddAlpha (added onto the scene) or LerpAlpha
+// (blended over it).
+inline std::string effect_material(const std::string &name, const std::string &stage, const char *blend, bool double_sided, bool glow = true)
 {
     std::string s = "  " + json_escape(name) + ": {\n    \"name\": " + json_escape(name) + ", \"mapTo\": " + json_escape(name) +
                     ", \"class\": \"Material\", \"version\": 1.5,\n    \"Stages\": [{\"baseColorFactor\": [0, 0, 0, 1], \"emissive\": true, " +
-                    "\"emissiveIntensityNits\": 1, \"emissiveIgnoreExposure\": true, \"glow\": true, " + stage + "}, {}, {}, {}],\n" +
+                    "\"emissiveIntensityNits\": 1, \"emissiveIgnoreExposure\": true, \"glow\": " + (glow ? "true" : "false") + ", " + stage + "}, {}, {}, {}],\n" +
                     "    \"translucent\": true, \"translucentBlendOp\": \"" + blend + "\", \"translucentZWrite\": false, \"castShadows\": false";
     if (double_sided) s += ", \"doubleSided\": true";
     return s + "\n  }";
@@ -265,7 +279,7 @@ inline std::string effect_kind_materials(const sonic_data::FxKind &kind, const s
                     ", \"opacityFactor\": " + json_num(std::min(1.0f, a));
         else
             stage = "\"emissiveFactor\": " + linear_colour(kind.colour, kind.gain * a) + ", \"emissiveMap\": " + json_escape(texture);
-        s += (s.empty() ? "" : ",\n") + effect_material(name, stage, kind.lerp ? "LerpAlpha" : "AddAlpha", true);
+        s += (s.empty() ? "" : ",\n") + effect_material(name, stage, kind.lerp ? "LerpAlpha" : "AddAlpha", true, kind.glow);
     }
     return s;
 }

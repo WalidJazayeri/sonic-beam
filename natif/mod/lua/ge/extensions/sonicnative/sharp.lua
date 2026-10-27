@@ -106,7 +106,8 @@ local function deletePasses()
   for _, pass in ipairs(PASSES) do deleteNamed(shaderName(pass.shader)) end
 end
 
--- the five PostEffects (made once a map): the first in BeamNG's motion blur's own bin
+-- the five PostEffects (made once a map): the first where effects.lua puts it (before the translucent
+-- objects, which stay sharp as in the overlay; BeamNG's own runs later, in OverlayRender)
 local function ensurePasses()
   local first = scenetree.findObject(PASSES[1].name)
   if first then return first end
@@ -127,8 +128,8 @@ local function ensurePasses()
     p.canSave = false
     if i == 1 then
       p.isEnabled = false
-      p:setField('renderTime', 0, 'PFXBeforeBin')
-      p:setField('renderBin', 0, BEAMNG_BIN)
+      p:setField('renderTime', 0, S.renderTime)
+      p:setField('renderBin', 0, S.bin)
       p.renderPriority = S.renderPriority
     end
     p:setField('shader', 0, shaders[i])

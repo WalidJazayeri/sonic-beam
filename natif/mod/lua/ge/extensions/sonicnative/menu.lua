@@ -31,12 +31,13 @@ local function add(key, value, target) defaults[key], owner[key] = value, target
 for k, v in pairs(config.settings) do add(k, v, 'body') end   -- Sonic mode, speed, jump height, water, wall, impact
 for _, k in ipairs({'soundDb', 'stepsDb', 'windDb', 'boostBoom', 'boostBoomKmh'}) do add(k, soundConfig.settings[k], 'sound') end
 add('jumpStyle', animConfig.tuning.jumpStyle, 'anim')
-add('ballSpinTurns', -1, 'anim')    -- main.lua's default: -1 spins the ball at Frontiers' own speed (the manifest's ball.spinSeconds)
+add('ballSpinTurns', 3, 'anim')     -- the overlay's default (sonic.lua settings.ballSpin); any negative value spins it at Frontiers' own speed
 add('animSpeed', animConfig.tuning.animSpeed, 'anim')
 add('animLimit', animConfig.tuning.animLimit, 'anim')
 for k, v in pairs(effects.settings) do add(k, v, 'fx') end    -- boost effects: trail, lightning, blur, aura, light
 for k, v in pairs(effects.sharp.settings) do add(k, v, 'sharp') end   -- the motion blur that keeps Sonic sharp
 add('showSpeed', true, 'menu')      -- the speedometer (overlay default, beamng/mod sonic.lua settings.showSpeed)
+add('settingsVersion', 2, 'menu')   -- the settings file's layout: 2 from natif-v0.7.0 (see loadSettings)
 
 -- the settings' setters: module, function
 local SETTERS = {
@@ -96,6 +97,10 @@ local function loadSettings()
     local good = valid(k, v)
     if good ~= nil then settings[k] = good; count = count + 1 end
   end
+  -- files before natif-v0.7.0 saved the old ball spin default (-1, Frontiers' speed) with everything else:
+  -- the overlay's default instead, once
+  if (tonumber(saved.settingsVersion) or 1) < 2 and saved.ballSpinTurns == -1 then settings.ballSpinTurns = defaults.ballSpinTurns end
+  settings.settingsVersion = defaults.settingsVersion
   loadedFrom = 'file'
   log('I', logTag, string.format('%d settings loaded from %s', count, SETTINGS_FILE))
 end
@@ -178,8 +183,8 @@ local LAB_MIN_DB, LAB_MAX_DB = soundConfig.rules.muteDb, 12   -- the overlay's r
 local LAB_FLOATS = {'stepsDb', 'soundDb', 'windDb', 'boostBoomKmh', 'waterRunKmh', 'swimKmh', 'wallRunKmh', 'wallGrip',
   'impactForce', 'carDamage', 'ballSpinTurns', 'jumpHeight', 'animSpeed', 'animLimit',
   'trailLength', 'trailIntensity', 'lightning', 'trailFade', 'fxSpeedAmount', 'blurStrength', 'boostLight',
-  'auraIntensity', 'auraLightning', 'motionBlurScale'}
-local LAB_BOOLS = {'boostBoom', 'runOnWater', 'runOnWalls', 'fxBySpeed', 'sharpSonic'}
+  'auraThickness', 'auraLength', 'auraIntensity', 'auraLightning', 'motionBlurScale', 'shadowOpacity', 'ballGlow'}
+local LAB_BOOLS = {'boostBoom', 'runOnWater', 'runOnWalls', 'fxBySpeed', 'auraBodyShape', 'sharpSonic'}
 local labOpen, labWidgets = false, nil
 
 local function openLab(tab)
@@ -209,6 +214,8 @@ local UNITS = {
   -- Speed influence: the share of the effects that follows the speed, and what they start from at standstill
   influence = {value = function(x) return string.format('%.2f (from %d %%)', x, math.floor((1 - x) * 100 + 0.5)) end,
     reset = function(x) return string.format('%g', x) end},
+  percent = {value = function(x) return string.format('%d %%', math.floor(x * 100 + 0.5)) end,
+    reset = function(x) return string.format('%d %%', math.floor(x * 100 + 0.5)) end},
   turns = {value = function(x) return x < 0 and "Frontiers' speed" or string.format('%.1f turns/s', x) end,
     reset = function(x) return x < 0 and 'Frontiers' or string.format('%g', x) end},
 }
@@ -220,6 +227,7 @@ local LAB_TIPS = {
   windDb = 'Volume of the rushing wind heard at high speed and while boosting. Higher is louder, lower is quieter; the lowest setting mutes it. It stacks with All Sonic sounds.',
   boostBoom = 'On: a boost started at or above the speed below sets off a sonic boom, left behind where it began; landing while boosting counts as a new start. Off: boosts never boom. Fast car hits boom either way.',
   boostBoomKmh = 'Sonic must already be this fast when a boost starts, or when he lands while boosting, for it to boom; speeding past it mid-boost does not count. Lower booms more often. Only used while the switch above is on.',
+  shadowOpacity = "How dark Sonic's shadow is. In the sun it is his silhouette cast away from the sun; with a low sun or at night a soft round patch under him. It fades as he rises. 0 removes it.",
   trailLength = 'How long the blue trail lingers behind Sonic while he boosts, and so how far back it reaches. Higher makes it longer; lower makes it shorter.',
   trailIntensity = 'How bright the blue trail behind Sonic is while he boosts. Higher makes it brighter; 0 hides the trail and the lightning arcs along it.',
   lightning = "How many lightning bolts crackle around Sonic and his trail while he boosts or as a boost starts, and how bright the trail's arcs are. 0 removes them. Bolts on his body are set in the Aura tab.",
@@ -228,7 +236,10 @@ local LAB_TIPS = {
   fxSpeedAmount = "How much the effects depend on Sonic's speed. At 0, speed changes nothing; at 1, they start from nothing when he stands still. The percentage is their strength standing still. Only used while the switch above is on.",
   blurStrength = 'Strength of the radial blur streaking the screen toward Sonic from 150 km/h (strongest at 600, half without the boost key) and briefly when a boost starts or he hits a car. Higher gives longer streaks; 0 turns it off.',
   boostLight = 'How bright the blue light is that flashes on the surroundings when a boost starts or Sonic hits a car. Higher is brighter; 0 turns it off.',
-  auraIntensity = "How bright the blue aura on Sonic's body is while he boosts or runs fast. Higher is brighter; 0 hides it. It fades while he is a ball, and grows with his speed when the Boost tab's speed switch is on.",
+  auraBodyShape = "On: the aura hugs Sonic's body (Frontiers' aura on his bones). Off: a glowing shell lies along his run, a round shield ahead of his face streaming back past his feet.",
+  auraThickness = "How wide the aura's shell is around Sonic. Higher makes it fatter, lower slimmer. Only used while Aura follows body shape is off.",
+  auraLength = "How far the aura's shell streams back behind Sonic; it also grows with his speed. Higher makes it longer, 0 gives the shortest tail. Only used while Aura follows body shape is off.",
+  auraIntensity = "How bright the blue aura around Sonic is while he boosts or runs fast. Higher is brighter; 0 hides it. It fades while he is a ball, and grows with his speed when the Boost tab's speed switch is on.",
   auraLightning = "How many lightning bolts crackle on Sonic's body while his aura is lit. Higher gives more; 0 removes them. They work even with the aura intensity at 0, follow the Boost tab's speed switch, and hide while he is a ball.",
   sharpSonic = "On: while Sonic is on foot, the scenery still blurs but Sonic stays sharp. Off: BeamNG's own motion blur smears Sonic too. Needs motion blur turned on in BeamNG's graphics options.",
   motionBlurScale = "How strong the motion blur is on foot, relative to BeamNG's own strength setting. Higher blurs the scenery more, up to a limit; 0 removes the motion blur on foot. Only used while the switch above is on.",
@@ -241,6 +252,7 @@ local LAB_TIPS = {
   impactForce = "How hard Sonic hits, as if he weighed this many tonnes. Higher knocks cars further and, when he loses speed by the car's mass, slows him less; at 0 his hits do not move cars. Unused when impacts are off.",
   carDamage = 'How much a car crumples where Sonic hits it. Higher puts more of the blow on the spot he hits, denting it deeper; 0 pushes the whole car evenly. No effect when Impact force is 0 or impacts are off.',
   ballSpinTurns = "How fast Sonic's jump ball rolls, in turns per second. Higher spins faster; 0 stops it spinning. Type a negative value to use Frontiers' own speed.",
+  ballGlow = "How bright the soft blue glow around Sonic's jump ball is. Higher is brighter; 0 removes it.",
   jumpHeight = 'How high Sonic jumps. The height follows the value: x2 jumps about twice as high, x0.5 about half as high. Jumps off a wall keep their own strength.',
   animSpeed = "How fast Sonic's legs move for his speed when walking, running, boosting or running on walls. Higher makes his strides quicker, lower slower, and his footsteps follow. The limit below still caps it.",
   animLimit = "The fastest Sonic's legs may move when walking, running, boosting or running on walls. Higher lets his strides keep speeding up at very high speed; lower caps them sooner for a calmer look.",
@@ -369,6 +381,10 @@ local function drawLab()
       if not on then im.EndDisabled() end
       im.EndTabItem()
     end
+    if labTab('Shadow') then
+      labSlider('Shadow opacity', 'shadowOpacity', 0, 1, UNITS.percent)
+      im.EndTabItem()
+    end
     if labTab('Boost') then
       labSlider('Trail length', 'trailLength', 0.25, 3, UNITS.times)
       labSlider('Trail intensity', 'trailIntensity', 0, 2, UNITS.times)
@@ -387,8 +403,13 @@ local function drawLab()
       im.EndTabItem()
     end
     if labTab('Aura') then
-      -- the overlay's body-shape switch, thickness and length are not in the native mode
       im.TextUnformatted('The blue aura on Sonic while he boosts or runs fast:')
+      local body = labSwitch('Aura follows body shape (otherwise it streams along the run)', 'auraBodyShape')
+      -- the shell's girth and length (native: they do nothing to the aura on his body)
+      if body then im.BeginDisabled(true) end
+      labSlider('Aura thickness', 'auraThickness', 0, 3, UNITS.times)
+      labSlider('Aura length', 'auraLength', 0, 3, UNITS.times)
+      if body then im.EndDisabled() end
       labSlider('Aura intensity', 'auraIntensity', 0, 2, UNITS.times)
       labSlider('Aura lightning', 'auraLightning', 0, 3, UNITS.times)
       im.EndTabItem()
@@ -439,6 +460,7 @@ local function drawLab()
       labChoices('jumpStyle', JUMP_STYLES)
       im.Spacing()
       labSlider('Ball spin speed', 'ballSpinTurns', 0, 8, UNITS.turns)
+      labSlider('Ball glow', 'ballGlow', 0, 2, UNITS.times)
       labSlider('Jump height', 'jumpHeight', 0.5, 3, UNITS.times)
       im.EndTabItem()
     end
