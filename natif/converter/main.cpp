@@ -57,7 +57,7 @@ void usage()
                 "                           [--no-uv-clamp] [--no-sounds] [--no-ball] [--no-aura] [--no-fx] [--locus-fallback]\n"
                 "                           [--fixture] [--out <folder>]\n"
                 "  --userpath    the folder BeamNG runs with (-userpath); output goes to <it>\\current\\mods\\%s\n"
-                "  --frontiers   default: frontiers= line of %%LOCALAPPDATA%%\\SonicBeam\\settings.ini\n"
+                "  --frontiers   default: frontiers= line of %%LOCALAPPDATA%%\\SonicBeamNative\\setup.ini (written by the setup)\n"
                 "  --clips       comma-separated clip ids, default all of them:\n                %s\n",
                 kVersion, kDataFolder, sonic_data::kDefaultClips);
     std::printf("  --split       clips: one <animation_clip> per clip (default); cs: one 'ambient' + a TSShapeConstructor .cs\n"
@@ -140,14 +140,15 @@ std::string out_refusal(const std::wstring &out)
     return {};
 }
 
-// The overlay's settings file names the Frontiers folder (frontiers=C:/games/Sonic Frontiers).
-std::wstring settings_frontiers()
+// The native setup's own file names the Frontiers folder (frontiers=C:\games\Sonic Frontiers); never the
+// overlay's settings.ini: the two modes share no file.
+std::wstring setup_ini_frontiers()
 {
     wchar_t local[MAX_PATH];
     const DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH);
     if (!n || n >= MAX_PATH) return {};
     std::vector<uint8_t> raw;
-    if (!frontiers::read_file(std::wstring(local) + L"\\SonicBeam\\settings.ini", raw)) return {};
+    if (!frontiers::read_file(std::wstring(local) + L"\\SonicBeamNative\\setup.ini", raw)) return {};
     std::string text(raw.begin(), raw.end());
     size_t at = 0;
     while (at < text.size()) {
@@ -849,7 +850,8 @@ bool prepare_fixture(const Options &o, Package &p)
 
 } // namespace
 
-int wmain(int argc, wchar_t **argv)
+// The whole converter; the setup (natif/installer) links this file in and calls it in-process.
+int sonicnative_convert_main(int argc, wchar_t **argv)
 {
     Options o;
     for (int i = 1; i < argc; ++i) {
@@ -919,8 +921,8 @@ int wmain(int argc, wchar_t **argv)
         hash_input += "|fixture";
         if (!prepare_fixture(o, p)) return 1;
     } else {
-        if (o.frontiers.empty()) o.frontiers = settings_frontiers();
-        if (o.frontiers.empty()) { std::printf("error: no Sonic Frontiers folder: pass --frontiers or set frontiers= in %%LOCALAPPDATA%%\\SonicBeam\\settings.ini\n"); return 2; }
+        if (o.frontiers.empty()) o.frontiers = setup_ini_frontiers();
+        if (o.frontiers.empty()) { std::printf("error: no Sonic Frontiers folder: pass --frontiers, or install with the setup (frontiers= in %%LOCALAPPDATA%%\\SonicBeamNative\\setup.ini)\n"); return 2; }
         p.folder = "sonic"; p.stem = "sonic";
         p.materials_file = "sonicnative.materials.json"; p.datablocks_file = "sonicnative.datablocks.json";
         p.datablock = "sonicnative_db";
@@ -946,3 +948,8 @@ int wmain(int argc, wchar_t **argv)
                 o.fixture ? "" : p.with_fx ? ", boost effects" : ", no boost effects");
     return 0;
 }
+
+// The standalone converter (natif/build/sonicnative_convert.exe); the setup has its own wWinMain.
+#ifndef SONICNATIVE_NO_WMAIN
+int wmain(int argc, wchar_t **argv) { return sonicnative_convert_main(argc, argv); }
+#endif

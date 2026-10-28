@@ -22,11 +22,23 @@ Close BeamNG first, build the converter (`natif\build.ps1 -Converter`), then run
 ```
 natif\build\sonicnative_convert.exe --userpath C:\Users\jazay\Documents\Sonic_Horizon\beamng\devuser
 ```
+Without `--frontiers`, the Sonic Frontiers folder is the `frontiers=` line of `%LOCALAPPDATA%\SonicBeamNative\setup.ini`, which the setup writes (never the overlay's `settings.ini`: the two modes share no file). Before a first install with the setup, pass `--frontiers <Sonic Frontiers folder>`.
+
+## Setup
+`natif\build.ps1 -Setup` builds the converter, then `natif\build-setup.ps1` builds the player's one file, `natif\build\SonicBeam-Setup-<version>.exe`, and prints its SHA256: the window and its logic (`natif/installer`), the converter linked in (`sonicnative_convert_main`, without its `wmain`) and every file of `natif/mod`, embedded at build time (`natif/build/gen/mod_payload.inc`, git-ignored). Nothing from Sonic Frontiers is in it.
+
+Run by the player (no admin rights), it:
+- finds the BeamNG user folder (previous install, Steam's `-userpath` launch option, BeamNG's launcher settings, `startup.ini`, else `%LOCALAPPDATA%\BeamNG\BeamNG.drive`) and Sonic Frontiers (previous install, Steam libraries, Epic), or lets the player browse; it refuses to install while the overlay mode is active or BeamNG runs;
+- Install (Reinstall once the mod is there) mirrors the mod into `mods\unpacked\sonicnative`, runs the converter in-process into `mods\sonicnative_data`, then writes `%LOCALAPPDATA%\SonicBeamNative\setup.ini` (`userpath=` and `frontiers=`: the next run's first guesses and the converter's default `--frontiers`). Installing again is how to update or repair;
+- Uninstall (run the setup again) removes only what it made in the user folder on screen (the Lab settings `settings\sonicnative.json` only when the player says so), and `setup.ini` when it names that folder (or none). Nothing goes in Windows' Installed apps and no copy of the setup is kept.
+
+Without a window: `--quiet` with `--install` or `--uninstall` (and `--userpath`, `--frontiers`, `--remove-settings`); exit codes 0 ok, 1 failed, 2 bad folders or arguments, 3 BeamNG is running, 4 cancelled. Its log: `%TEMP%\SonicBeamNative-setup.log`.
 
 ## Build and install for dev
 ```
 powershell -ExecutionPolicy Bypass -File natif\build.ps1                    # Lua check
 powershell -ExecutionPolicy Bypass -File natif\build.ps1 -Converter         # + build the converter
+powershell -ExecutionPolicy Bypass -File natif\build.ps1 -Setup             # + converter, then the player's setup
 powershell -ExecutionPolicy Bypass -File natif\build.ps1 -Install           # + mod into beamng\devuser
 powershell -ExecutionPolicy Bypass -File natif\build.ps1 -Install -Normal   # + mod into %LOCALAPPDATA%\BeamNG\BeamNG.drive\current
 ```

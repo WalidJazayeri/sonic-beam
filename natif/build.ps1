@@ -1,10 +1,12 @@
-# Builds Sonic Beam's native mode (natif/): Lua check -> converter (-Converter) -> install (-Install).
-# No DLL and no package yet. The converter's output (Sonic from the player's own Frontiers) goes to
-# the BeamNG user folder only, never into the repo or the mod.
+# Builds Sonic Beam's native mode (natif/): Lua check -> converter (-Converter) -> setup (-Setup) -> install (-Install).
+# No DLL. The converter's output (Sonic from the player's own Frontiers) goes to the BeamNG user folder only,
+# never into the repo, the mod or the setup.
 #   -Converter        also builds the converter (natif\build-converter.ps1)
+#   -Setup            also builds the converter, then the player's setup natif\build\SonicBeam-Setup-<version>.exe
+#                     (natif\build-setup.ps1: natif\mod and the converter in one exe)
 #   -Install          mirrors natif\mod into beamng\devuser\current\mods\unpacked\sonicnative
 #   -Install -Normal  same into %LOCALAPPDATA%\BeamNG\BeamNG.drive\current\mods\unpacked\sonicnative
-param([switch]$Converter, [switch]$Install, [switch]$Normal)
+param([switch]$Converter, [switch]$Setup, [switch]$Install, [switch]$Normal)
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $repo = Split-Path -Parent $root
@@ -44,7 +46,7 @@ foreach ($lua in $luaFiles) {
 }
 Write-Output ("Lua check passed ({0} files)" -f $luaFiles.Count)
 
-if ($Converter) {
+if ($Converter -or $Setup) {
     $converterBuild = Join-Path $root 'build-converter.ps1'
     if (Test-Path $converterBuild) {
         $global:LASTEXITCODE = 0
@@ -53,6 +55,13 @@ if ($Converter) {
     } else {
         Write-Warning 'natif\build-converter.ps1 does not exist yet: converter not built'
     }
+}
+
+if ($Setup) {
+    # the standalone converter above still builds with its wmain; the setup links the same main.cpp without it
+    $global:LASTEXITCODE = 0
+    & (Join-Path $root 'build-setup.ps1')
+    if ($LASTEXITCODE -ne 0) { throw "build-setup.ps1 failed (exit code $LASTEXITCODE)" }
 }
 
 if ($Normal -and -not $Install) { Write-Warning '-Normal only picks the folder for -Install: nothing installed' }

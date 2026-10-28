@@ -5,6 +5,22 @@ Le mode natif (dossier `natif/`) a ses propres versions : le numéro est dans `n
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## natif-v1.0.0
+- **Première version publique du mode natif, avec un setup pour les joueurs** : un seul fichier, `SonicBeam-Setup-1.0.0.exe` (fabriqué par `natif\build.ps1 -Setup`), sans droits administrateur. Il contient le mod et le convertisseur, et aucun fichier de Sonic Frontiers.
+  - Il trouve tout seul le dossier utilisateur de BeamNG.drive (installation précédente, option `-userpath` des options de lancement Steam, réglages du lanceur de BeamNG, `startup.ini`, sinon le dossier par défaut) et Sonic Frontiers (installation précédente, bibliothèques Steam, Epic). Sinon, un bouton **Browse...** permet de choisir le dossier, pour une copie hors Steam par exemple. Chaque dossier est vérifié (pour Frontiers : les 3 fichiers que le convertisseur lit).
+  - **Install** (ou **Reinstall**) copie le mod dans `mods\unpacked\sonicnative` (en retirant les fichiers qui n'en font plus partie), convertit Sonic en environ 2 secondes, et retient les deux dossiers dans `%LOCALAPPDATA%\SonicBeamNative\setup.ini`.
+  - **Uninstall** retire le mod, les fichiers convertis et leurs caches, et les réglages du Lab si le joueur le veut. Rien d'autre n'est touché : ni Sonic Frontiers, ni BeamNG, ni les autres mods. Pour désinstaller, on relance le setup.
+  - Il refuse d'installer quand BeamNG tourne ou quand l'ancien mode superposé est installé dans ce dossier (les deux modes ne doivent jamais être installés ensemble). Le détail de chaque étape s'affiche dans la fenêtre et dans `%TEMP%\SonicBeamNative-setup.log`.
+- Le convertisseur ne lit plus les réglages du mode superposé (`%LOCALAPPDATA%\SonicBeam\settings.ini`). Sans `--frontiers`, il prend le dossier retenu par le setup, ce qui fait que les deux modes ne partagent plus aucun fichier.
+- Le README de GitHub est réécrit pour le mode natif (installation avec le setup, touches, fonctions). Le paragraphe sur SEGA et BeamNG passe de `LICENSE` au README, pour que GitHub reconnaisse la licence MIT.
+- Relu par des agents. Une première relecture a trouvé, entre autres, une désinstallation qui annonçait un succès avec un mauvais dossier, et l'installation encore possible quand le mode superposé est actif : tout est corrigé. Le setup a ensuite été simplifié : pas d'entrée dans les Applications installées de Windows, pas de copie installée.
+- Testé sur ce PC :
+  - installation, réinstallation et désinstallation dans un dossier de test : le mod est identique à `natif/mod`, la conversion est identique octet par octet à celle du convertisseur (seule la date écrite dans les formes change), et les fichiers d'un autre mod et d'autres réglages ne sont pas touchés ;
+  - un mauvais dossier est refusé sans rien toucher ;
+  - la fenêtre trouve `devuser` grâce aux options de lancement Steam ;
+  - installé avec le setup 1.0.0 dans `devuser` et le dossier normal, puis testé en jeu sur West Coast USA : Sonic, son ombre, la bulle du boost, la traînée et les éclairs, sans aucune erreur dans le journal. Les captures du README viennent de cette partie.
+- À savoir : le setup n'est pas signé. Windows peut afficher « Windows a protégé votre ordinateur » (Informations complémentaires, puis Exécuter quand même), et Smart App Control, s'il est activé, peut le bloquer.
+
 ## natif-v0.7.0
 - **Le Sonic natif rattrape le look du superposé**, d'après deux enregistrements de 2 minutes (superposé et natif) comparés image par image, puis réglé et testé en jeu sur Gridmap V2.
 - **Les carrés gris ont disparu.** Le halo et l'anneau du départ de boost, et le bord adouci du faisceau de la traînée, étaient écrits en DDS non compressé, que BeamNG refuse (« only RGB formats are supported ») : ces quads s'affichaient en carrés gris et le faisceau sans dégradé. Le convertisseur les écrit maintenant en PNG (petit encodeur intégré, sans bibliothèque). **Il faut relancer le convertisseur** ; tant que la conversion est ancienne, le journal du jeu le rappelle.
