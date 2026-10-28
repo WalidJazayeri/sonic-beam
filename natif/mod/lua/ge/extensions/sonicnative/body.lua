@@ -282,6 +282,35 @@ local function setSonicCamera(on)
   end
 end
 
+-- The walking keys. BeamNG's own (vehicles/unicycle/unicycle_default.interaction.json) set the
+-- direction to 0 on any release: rolling from Q/A to D (or Z/W to S) without letting go of the
+-- first key dropped the one still held until it was pressed again. On the walking body the four
+-- keys go to the runner instead (sonicnativeKey), which keeps what each key holds; a body without
+-- the runner still gets BeamNG's own command. A mod file cannot do it: BeamNG reads its own
+-- interaction file after the mods', so the body's actions are changed here and the key maps rebuilt
+local WALK_KEYS = {walkLeft = 'left', walkRight = 'right', walkUp = 'up', walkDown = 'down'}
+local function setWalkKeys(unicycle)
+  local vd = core_vehicle_manager and core_vehicle_manager.getVehicleData(unicycle:getId())
+  local actions = vd and vd.vdata and vd.vdata.inputActions
+  if not actions or (actions.walkLeft and actions.walkLeft.sonicnative) then return end
+  local changed = false
+  for name, key in pairs(WALK_KEYS) do
+    local a = actions[name]
+    if a and a.onDown and a.onUp then
+      local head = "local c = controller.getControllerSafe('playerController') if c.sonicnativeKey then c.sonicnativeKey('" .. key
+      a.onDown = head .. "', true) else " .. a.onDown .. " end"
+      a.onUp = head .. "', false) else " .. a.onUp .. " end"
+      a.sonicnative = true
+      changed = true
+    end
+  end
+  if not changed then return end
+  -- what BeamNG runs when the player switches vehicles: its actions read again, its key maps rebuilt
+  if core_input_actions then core_input_actions.onVehicleSwitched() end
+  if core_input_bindings then core_input_bindings.onVehicleSwitched(unicycle:getId(), unicycle:getId(), 0) end
+  log('I', logTag, 'walking keys: a key released no longer drops the one still held')
+end
+
 -- The camera keys while Sonic is on foot.
 -- C: BeamNG's walking body binds C to crouching in its own key map, which comes before the game's
 -- camera keys. Sonic never crouches, so that action is filtered out and C reaches BeamNG's "next
@@ -485,6 +514,7 @@ local function onPreRender(dtReal)
       sentWaterZ = wz
       unicycle:queueLuaCommand('if sonicnative_runner then sonicnative_runner.setWater(' .. (wz and string.format('%.3f', wz) or 'nil') .. ') end')
     end
+    setWalkKeys(unicycle)
     groundedByRay = updateBody(unicycle)
     checkImpacts(unicycle)
     rememberSafeSpot(unicycle, groundedByRay or runner.grounded == 1)

@@ -26,7 +26,7 @@ $luaGlobals = @(
   'clamp','deepcopy','dumps','extensions','jsonDecode','jsonEncode','jsonReadFile','jsonWriteFile','log','M',
   'quat','quatFromDir','serialize','setExtensionUnloadMode','vec3',
   # BeamNG game engine (GE) Lua
-  'be','castRayStatic','ColorF','commands','core_camera','core_gamestate','core_input_actionFilter','createObject','debugDrawer','Engine','FS',
+  'be','castRayStatic','ColorF','commands','core_camera','core_gamestate','core_input_actionFilter','core_input_actions','core_input_bindings','core_vehicle_manager','createObject','debugDrawer','Engine','FS',
   'gameplay_missions_missionManager','gameplay_walk','getAllVehicles','getPlayerVehicle','guihooks','hptimer',
   'loadJsonMaterialsFile','readFile','scenetree','simTimeAuthority','spawn','TorqueScript','ui_imgui','ui_message',
   # BeamNG vehicle Lua

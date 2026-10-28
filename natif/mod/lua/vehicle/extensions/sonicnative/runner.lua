@@ -16,6 +16,10 @@ local groundIndex = {}            -- ground key -> 0..6, for the relay's packed 
 for i, k in ipairs(G.keys) do groundIndex[k] = i - 1 end
 
 local walkX, walkY = 0, 0
+-- the walking keys held (sent here by sonicnative_body, setWalkKeys): BeamNG's own keys
+-- set the direction to 0 on any release, so rolling from Q/A to D (or Z/W to S) dropped the one
+-- still held until it was pressed again
+local keysHeld = {left = false, right = false, up = false, down = false}
 local boostHeld = 0
 local camFwd = vec3(0, 1, 0)
 local jumpQueued = false
@@ -103,6 +107,16 @@ local function wrapPlayerController()
   pc.walkLeftRightRaw = function(v) walkX = v; if not gliding then return o.walkLeftRightRaw(v) end end
   pc.walkUpDown = function(v) walkY = walkY + v; if not gliding then return o.walkUpDown(v) end end
   pc.walkLeftRight = function(v) walkX = walkX + v; if not gliding then return o.walkLeftRight(v) end end
+  -- a walking key pressed or released: the direction is what the keys still held give
+  pc.sonicnativeKey = function(key, down)
+    if keysHeld[key] == nil then return end
+    keysHeld[key] = down and true or false
+    if key == 'left' or key == 'right' then
+      pc.walkLeftRightRaw((keysHeld.right and 1 or 0) - (keysHeld.left and 1 or 0))
+    else
+      pc.walkUpDownRaw((keysHeld.up and 1 or 0) - (keysHeld.down and 1 or 0))
+    end
+  end
   -- Shift is Sonic's boost; the walking controller's own speed is set by onPhysicsStep instead.
   pc.setSpeedCoef = function(v) boostHeld = v; if not enabled then return o.setSpeedCoef(v) end end
   pc.toggleSpeedCoef = function() boostHeld = 1 - boostHeld; if not enabled then return o.toggleSpeedCoef() end end
@@ -597,7 +611,10 @@ local function onExtensionLoaded()
 end
 
 local function onReset()
-  jumpTimer, jumpQueued, walkX, walkY, flightTime = 0, false, 0, 0, nil
+  -- the walking keys still held keep their direction (a reset sends no key again)
+  walkX = (keysHeld.right and 1 or 0) - (keysHeld.left and 1 or 0)
+  walkY = (keysHeld.up and 1 or 0) - (keysHeld.down and 1 or 0)
+  jumpTimer, jumpQueued, flightTime = 0, false, nil
   speedTarget, learnedPush = 0, 0
   gliding = true
   setGlide(false)
@@ -629,7 +646,10 @@ M.setEnabled = function(on)
     log('I', 'sonicnative', on and 'Sonic takes over the walking body' or 'walking body handed back to BeamNG')
   end
   -- each time he takes the body Sonic starts from released keys: no walk or boost carried over
-  if on then walkX, walkY, boostHeld = 0, 0, 0 end
+  if on then
+    walkX, walkY, boostHeld = 0, 0, 0
+    for k in pairs(keysHeld) do keysHeld[k] = false end
+  end
   relayKey = -1   -- the game engine side hears the state again at once
 end
 M.setSpeedSettings = function(capOn, capKmh, rampKmhPerSecond, jumpHeight, runOnWater, waterRunKmh, swimKmh, runOnWalls, wallRunKmh, wallGripSeconds)

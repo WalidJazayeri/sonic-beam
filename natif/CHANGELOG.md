@@ -5,6 +5,12 @@ Le mode natif (dossier `natif/`) a ses propres versions : le numéro est dans `n
 - **MINEUR** (2e nombre) : mise à jour plus importante ;
 - **MAJEUR** (1er nombre) : grosse mise à jour.
 
+## natif-v1.0.1
+- **Une touche de direction relâchée ne coupe plus celle qui est encore tenue.** Signalé par un joueur en AZERTY : en passant de Q à D (en boost ou non) sans lâcher Q tout de suite, Sonic allait tout droit dès qu'il lâchait Q, alors que D était toujours enfoncée, et il fallait réappuyer sur D. Même chose entre Z et S. La cause est dans le mode marche de BeamNG lui-même : ses touches de marche remettent la direction à 0 à chaque relâchement, sans regarder l'autre touche. Shift n'y était pour rien.
+  - Quand Sonic prend le personnage, le mod change ces quatre touches (`sonicnative_body`, `setWalkKeys`) : chacune dit au script de course si elle est enfoncée ou relâchée, et la direction est celle des touches encore tenues. Avec Q et D tenues, Sonic s'arrête ; dès qu'on lâche Q, il repart à droite.
+  - Les touches réglées par le joueur dans les options de BeamNG marchent toujours. La manette n'est pas touchée. Un fichier de mod ne suffisait pas : BeamNG lit son propre fichier de touches du personnage après ceux des mods.
+- Testé en jeu sur Gridmap V2 : avant la correction, de vraies touches envoyées au jeu reproduisaient le bug (Q, D, puis lâcher Q : direction 0). Après, les commandes exactes de chaque touche, dans l'ordre Q, D, lâcher Q, lâcher D (et Z/S, D/Q, un relâchement sans appui) donnent la bonne direction, et Sonic part bien à droite quand on lâche Q.
+
 ## natif-v1.0.0
 - **Première version publique du mode natif, avec un setup pour les joueurs** : un seul fichier, `SonicBeam-Setup-1.0.0.exe` (fabriqué par `natif\build.ps1 -Setup`), sans droits administrateur. Il contient le mod et le convertisseur, et aucun fichier de Sonic Frontiers.
   - Il trouve tout seul le dossier utilisateur de BeamNG.drive (installation précédente, option `-userpath` des options de lancement Steam, réglages du lanceur de BeamNG, `startup.ini`, sinon le dossier par défaut) et Sonic Frontiers (installation précédente, bibliothèques Steam, Epic). Sinon, un bouton **Browse...** permet de choisir le dossier, pour une copie hors Steam par exemple. Chaque dossier est vérifié (pour Frontiers : les 3 fichiers que le convertisseur lit).
